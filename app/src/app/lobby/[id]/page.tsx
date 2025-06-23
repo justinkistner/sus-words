@@ -313,6 +313,28 @@ export default function Lobby() {
                     ))}
                   </ul>
                 )}
+                <div className="mt-4 pt-4 border-t border-slate-600">
+                  <div className="flex items-center justify-between p-3 bg-slate-600/50 rounded-lg">
+                    <span className="font-medium">
+                      Your Status: <span className={isReady ? 'text-green-400' : 'text-gray-400'}>
+                        {isReady ? 'Ready' : 'Not Ready'}
+                      </span>
+                    </span>
+                    <button
+                      onClick={handleToggleReady}
+                      className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                        isReady ? 'bg-green-600' : 'bg-gray-600'
+                      }`}
+                    >
+                      <span className="sr-only">Toggle ready status</span>
+                      <span
+                        className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                          isReady ? 'translate-x-9' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -368,29 +390,6 @@ export default function Lobby() {
 
           <div className="mt-4 text-sm text-gray-400">
             Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-          </div>
-
-          <div className="mt-6">
-            <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-              <span className="text-lg font-medium">
-                Your Status: <span className={isReady ? 'text-green-400' : 'text-gray-400'}>
-                  {isReady ? 'Ready' : 'Not Ready'}
-                </span>
-              </span>
-              <button
-                onClick={handleToggleReady}
-                className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
-                  isReady ? 'bg-green-600' : 'bg-gray-600'
-                }`}
-              >
-                <span className="sr-only">Toggle ready status</span>
-                <span
-                  className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                    isReady ? 'translate-x-9' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
           </div>
         </div>
       </div>
