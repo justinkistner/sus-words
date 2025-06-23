@@ -371,16 +371,26 @@ export default function Lobby() {
           </div>
 
           <div className="mt-6">
-            <button
-              onClick={handleToggleReady}
-              className={`w-full px-6 py-3 rounded-lg font-medium transition-all ${
-                isReady 
-                  ? 'bg-green-600 hover:bg-green-700 text-white' 
-                  : 'bg-gray-600 hover:bg-gray-700 text-white'
-              }`}
-            >
-              {isReady ? '✓ Ready to Start' : 'Click When Ready'}
-            </button>
+            <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+              <span className="text-lg font-medium">
+                Your Status: <span className={isReady ? 'text-green-400' : 'text-gray-400'}>
+                  {isReady ? 'Ready' : 'Not Ready'}
+                </span>
+              </span>
+              <button
+                onClick={handleToggleReady}
+                className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                  isReady ? 'bg-green-600' : 'bg-gray-600'
+                }`}
+              >
+                <span className="sr-only">Toggle ready status</span>
+                <span
+                  className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                    isReady ? 'translate-x-9' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         </div>
       </div>
