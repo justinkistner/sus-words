@@ -61,7 +61,7 @@ export default function TestRealtime() {
       }
 
       addLog(`Room created successfully: ${data.id}`);
-      setTestRoomId(data.id);
+      setTestRoomId(data.id as string);
       return data.id;
     } catch (err) {
       addLog(`Exception: ${err instanceof Error ? err.message : String(err)}`);
