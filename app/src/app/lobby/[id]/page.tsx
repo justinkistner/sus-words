@@ -197,7 +197,7 @@ export default function Lobby() {
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
-  const leaveGame = async () => {
+  const handleLeaveGame = async () => {
     const playerId = localStorage.getItem('playerId');
     if (!playerId) return;
 
@@ -399,7 +399,7 @@ export default function Lobby() {
 
           <div className="mt-6 flex justify-between">
             <button
-              onClick={leaveGame}
+              onClick={handleLeaveGame}
               className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
             >
               Leave Game
