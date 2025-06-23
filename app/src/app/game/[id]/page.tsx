@@ -179,39 +179,40 @@ export default function Game() {
           <div className="flex-1 flex justify-center items-center">
             {room?.currentPhase === 'results' && isHost && (
               <>
-                {room.currentRound < room.totalRounds ? (
+                {room?.currentRound < room?.totalRounds ? (
                   <button
                     onClick={async () => {
-                      if (room.currentRound >= room.totalRounds) {
+                      if (room?.currentRound >= room?.totalRounds) {
                         // Transition to finished phase
                         const supabase = createClient();
                         await supabase
                           .from('rooms')
                           .update({ current_phase: 'finished' })
                           .eq('id', roomId);
-                      } else {
-                        setIsStartingNextRound(true);
-                        try {
-                          const result = await startNextRound(roomId);
-                          
-                          if (!result.success) {
-                            console.error('Failed to start next round:', result.error);
-                            alert(`Failed to start next round: ${result.error || 'Unknown error'}`);
-                            setIsStartingNextRound(false);
-                          } else {
-                            // Reset local state for new round
-                            setClue('');
-                            setSubmittedClue(false);
-                            setSelectedVote(null);
-                            setFakerGuess('');
-                            setHasSubmittedVote(false);
-                            setIsStartingNextRound(false);
-                          }
-                        } catch (error) {
-                          console.error('Error starting next round:', error);
-                          alert(`Error starting next round: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                        return;
+                      }
+                      
+                      setIsStartingNextRound(true);
+                      try {
+                        const result = await startNextRound(roomId);
+                        
+                        if (!result.success) {
+                          console.error('Failed to start next round:', result.error);
+                          alert(`Failed to start next round: ${result.error || 'Unknown error'}`);
+                          setIsStartingNextRound(false);
+                        } else {
+                          // Reset local state for new round
+                          setClue('');
+                          setSubmittedClue(false);
+                          setSelectedVote(null);
+                          setFakerGuess('');
+                          setHasSubmittedVote(false);
                           setIsStartingNextRound(false);
                         }
+                      } catch (error) {
+                        console.error('Error starting next round:', error);
+                        alert(`Error starting next round: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                        setIsStartingNextRound(false);
                       }
                     }}
                     disabled={isStartingNextRound}
@@ -245,10 +246,10 @@ export default function Game() {
         </div>
 
         {/* Player Role Info / Voting / Results - Unified Container */}
-        {(room.currentPhase === 'clueGiving' || room.currentPhase === 'voting' || room.currentPhase === 'results' || room.currentPhase === 'fakerGuess' || room.currentPhase === 'finished') && currentPlayerId && (
-          <div className="mb-8 p-6 bg-slate-700 rounded-lg transition-all duration-300 ease-in-out" style={{ minHeight: room.currentPhase === 'voting' || room.currentPhase === 'results' || room.currentPhase === 'fakerGuess' || room.currentPhase === 'finished' ? 'auto' : '180px' }}>
+        {(room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting' || room?.currentPhase === 'results' || room?.currentPhase === 'fakerGuess' || room?.currentPhase === 'finished') && currentPlayerId && (
+          <div className="mb-8 p-6 bg-slate-700 rounded-lg transition-all duration-300 ease-in-out" style={{ minHeight: room?.currentPhase === 'voting' || room?.currentPhase === 'results' || room?.currentPhase === 'fakerGuess' || room?.currentPhase === 'finished' ? 'auto' : '180px' }}>
             {/* Clue Giving Phase */}
-            {room.currentPhase === 'clueGiving' && (
+            {room?.currentPhase === 'clueGiving' && (
               <div className="animate-fadeIn">
                 <RoleReveal 
                   isFaker={isFaker} 
@@ -264,7 +265,7 @@ export default function Game() {
             )}
 
             {/* Voting Phase */}
-            {room.currentPhase === 'voting' && (
+            {room?.currentPhase === 'voting' && (
               <div className="animate-fadeIn">
                 <h3 className="text-xl font-semibold mb-4">All Clues:</h3>
                 <div className="space-y-3">
@@ -346,7 +347,7 @@ export default function Game() {
             )}
 
             {/* Faker Guess Phase */}
-            {room.currentPhase === 'fakerGuess' && (
+            {room?.currentPhase === 'fakerGuess' && (
               <div className="space-y-6">
                 <div className="bg-slate-700 rounded-lg p-6 text-center">
                   <h3 className="text-2xl font-bold mb-2">
@@ -365,7 +366,7 @@ export default function Game() {
                       
                       {/* Word Grid as buttons */}
                       <div className="grid grid-cols-4 gap-3 mb-6">
-                        {(Array.isArray(room.wordGrid) ? room.wordGrid : []).flat().map((word: string, index: number) => (
+                        {(Array.isArray(room?.wordGrid) ? room?.wordGrid : []).flat().map((word: string, index: number) => (
                           <button
                             key={index}
                             onClick={() => setFakerGuess(word)}
@@ -418,7 +419,7 @@ export default function Game() {
             )}
 
             {/* Results Phase */}
-            {room.currentPhase === 'results' && (
+            {room?.currentPhase === 'results' && (
               <div className="animate-fadeIn space-y-6">
                 {/* Result Summary */}
                 <div className="text-center">
@@ -564,7 +565,7 @@ export default function Game() {
             )}
 
             {/* Finished Phase - Game Over */}
-            {room.currentPhase === 'finished' && (
+            {room?.currentPhase === 'finished' && (
               <div className="animate-fadeIn space-y-6">
                 <Confetti />
                 <div className="text-center">
@@ -624,14 +625,14 @@ export default function Game() {
         )}
         
         {/* Word Grid - Hidden during voting results display, for faker during fakerGuess phase, and during finished phase */}
-        {!(room.currentPhase === 'results') && !(room.currentPhase === 'fakerGuess' && isFaker) && !(room.currentPhase === 'finished') && (
+        {!(room?.currentPhase === 'results') && !(room?.currentPhase === 'fakerGuess' && isFaker) && !(room?.currentPhase === 'finished') && (
           <div className="mb-8">
-            <h2 className="text-2xl font-semibold mb-4">{room.category || 'Word Grid'}</h2>
+            <h2 className="text-2xl font-semibold mb-4">{room?.category || 'Word Grid'}</h2>
             <div className="grid grid-cols-4 gap-4">
-              {(room.wordGrid || []).map((word, index) => {
+              {(room?.wordGrid || []).map((word, index) => {
                 const isSecretWord = (
-                  (!isFaker && (room.currentPhase === 'clueGiving' || room.currentPhase === 'voting') && secretWord && word === secretWord && hasRevealedRole) ||
-                  (room.currentPhase === 'results' && secretWord && word === secretWord)
+                  (!isFaker && (room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting') && secretWord && word === secretWord && hasRevealedRole) ||
+                  (room?.currentPhase === 'results' && secretWord && word === secretWord)
                 );
                 return (
                   <div 
