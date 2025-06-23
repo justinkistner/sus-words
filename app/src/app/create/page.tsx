@@ -98,7 +98,7 @@ export default function CreateGame() {
       }
 
       // Store player ID in local storage for session management
-      localStorage.setItem('playerId', playerData.id);
+      localStorage.setItem('playerId', playerData.id as string);
       localStorage.setItem('playerName', playerName);
 
       // Redirect to lobby
