@@ -199,40 +199,16 @@ export default function Lobby() {
 
   const handleLeaveGame = async () => {
     const playerId = localStorage.getItem('playerId');
-    if (!playerId) return;
-
-    try {
-      // Remove player from room_players
-      await supabase
-        .from('room_players')
-        .delete()
-        .eq('room_id', roomId)
-        .eq('player_id', playerId);
-
-      // If host is leaving, select a new host or delete the room
-      if (isHost) {
-        const remainingPlayers = players.filter(p => p.id !== playerId);
-        
-        if (remainingPlayers.length > 0) {
-          // Select first remaining player as new host
-          const newHostId = remainingPlayers[0].id;
-          await supabase
-            .from('room_players')
-            .update({ is_host: true })
-            .eq('room_id', roomId)
-            .eq('player_id', newHostId);
-        } else {
-          // No players left, mark room as inactive
-          await supabase
-            .from('rooms')
-            .update({ is_active: false })
-            .eq('id', roomId);
-        }
-      }
-
+    if (!playerId || isLeaving) return;
+    
+    setIsLeaving(true);
+    const result = await leaveGame(roomId, playerId);
+    
+    if (result.success) {
       router.push('/');
-    } catch (err: any) {
-      console.error('Error leaving game:', err);
+    } else {
+      alert(result.error || 'Failed to leave game');
+      setIsLeaving(false);
     }
   };
 
@@ -273,21 +249,6 @@ export default function Lobby() {
       console.error('Error updating player score:', error);
     } else {
       console.log('Player score updated successfully - check if realtime event fires');
-    }
-  };
-
-  const handleLeaveGame = async () => {
-    const playerId = localStorage.getItem('playerId');
-    if (!playerId || isLeaving) return;
-    
-    setIsLeaving(true);
-    const result = await leaveGame(roomId, playerId);
-    
-    if (result.success) {
-      router.push('/');
-    } else {
-      alert(result.error || 'Failed to leave game');
-      setIsLeaving(false);
     }
   };
 
@@ -444,13 +405,6 @@ export default function Lobby() {
               className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
             >
               Test Player Update
-            </button>
-            <button
-              onClick={handleLeaveGame}
-              disabled={isLeaving}
-              className="px-6 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-            >
-              {isLeaving ? 'Leaving...' : 'Leave Game'}
             </button>
           </div>
         </div>
