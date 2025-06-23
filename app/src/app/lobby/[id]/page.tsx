@@ -233,25 +233,6 @@ export default function Lobby() {
     }
   };
 
-  const handleTestPlayerUpdate = async () => {
-    console.log('Testing room_players update...');
-    const playerId = localStorage.getItem('playerId');
-    if (!playerId) return;
-
-    // Update the player's score as a test
-    const { error } = await supabase
-      .from('room_players')
-      .update({ score: Math.floor(Math.random() * 100) })
-      .eq('room_id', params.id as string)
-      .eq('player_id', playerId);
-
-    if (error) {
-      console.error('Error updating player score:', error);
-    } else {
-      console.log('Player score updated successfully - check if realtime event fires');
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
@@ -389,22 +370,16 @@ export default function Lobby() {
             Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
           </div>
 
-          <div className="mt-6 flex justify-between">
+          <div className="mt-6">
             <button
               onClick={handleToggleReady}
-              className={`px-4 py-2 ${
+              className={`w-full px-6 py-3 rounded-lg font-medium transition-all ${
                 isReady 
-                  ? 'bg-green-600 hover:bg-green-700' 
-                  : 'bg-slate-600 hover:bg-slate-700'
-              } rounded text-white transition-colors`}
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'bg-gray-600 hover:bg-gray-700 text-white'
+              }`}
             >
-              {isReady ? 'Ready!' : 'Not Ready'}
-            </button>
-            <button
-              onClick={handleTestPlayerUpdate}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-            >
-              Test Player Update
+              {isReady ? '✓ Ready to Start' : 'Click When Ready'}
             </button>
           </div>
         </div>
