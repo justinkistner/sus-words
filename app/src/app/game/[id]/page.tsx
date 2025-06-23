@@ -130,31 +130,31 @@ export default function Game() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
-        <div className="text-2xl font-bold mb-4">Loading game...</div>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 md:p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
+        <div className="text-xl sm:text-2xl font-bold mb-4">Loading game...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
-        <div className="text-2xl font-bold mb-4 text-red-500">Error</div>
-        <p className="text-gray-300">{error}</p>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 md:p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
+        <div className="text-xl sm:text-2xl font-bold mb-4 text-red-500">Error</div>
+        <p className="text-gray-300 text-center px-4">{error}</p>
       </div>
     );
   }
 
   if (!room) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
-        <div className="text-2xl font-bold mb-4">Game not found</div>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 md:p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
+        <div className="text-xl sm:text-2xl font-bold mb-4">Game not found</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
+    <div className="min-h-screen p-4 sm:p-6 md:p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
       <div className="max-w-6xl mx-auto">
         {/* Connection status */}
         {connectionError && (
@@ -170,13 +170,13 @@ export default function Game() {
         )}
 
         {/* Header */}
-        <div className="flex justify-between items-center mb-6 h-12">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2 sm:gap-0">
           <div>
-            <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">{room?.name || 'Loading...'}</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">{room?.name || 'Loading...'}</h1>
           </div>
           
           {/* Center - Next Round Button (Results Phase Only) */}
-          <div className="flex-1 flex justify-center items-center">
+          <div className="flex-1 flex justify-start sm:justify-center items-center mt-2 sm:mt-0">
             {room?.currentPhase === 'results' && isHost && (
               <>
                 {room?.currentRound < room?.totalRounds ? (
@@ -277,7 +277,7 @@ export default function Game() {
                     const playerHasSubmittedVote = playerVotes.some(v => v.voterId === pc.playerId);
                     
                     return (
-                      <div key={pc.playerId} className="flex items-center gap-4 p-3 bg-slate-600 rounded-lg">
+                      <div key={pc.playerId} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 p-3 bg-slate-600 rounded-lg">
                         {/* Voting Status Icon */}
                         <div className="flex-shrink-0">
                           {playerHasSubmittedVote ? (
@@ -298,44 +298,40 @@ export default function Game() {
                         </div>
                         
                         {/* Vote Button */}
-                        {!isCurrentPlayer && (
-                          <div className="flex-shrink-0">
-                            {!hasVotedForThis && !hasSubmittedVote && (
-                              <button
-                                onClick={() => setSelectedVote(pc.playerId)}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-all transform hover:scale-105"
-                              >
-                                Vote
-                              </button>
-                            )}
-                            
-                            {hasVotedForThis && !hasSubmittedVoteForThis && (
-                              <button
-                                onClick={handleVoteSubmit}
-                                disabled={isSubmittingVote}
-                                className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-all transform hover:scale-105"
-                              >
-                                {isSubmittingVote ? 'Confirming...' : 'Confirm'}
-                              </button>
-                            )}
-                            
-                            {hasSubmittedVoteForThis && (
-                              <div className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium flex items-center gap-2">
-                                <span>✓</span>
-                                <span>Voted</span>
-                              </div>
-                            )}
-                            
-                            {hasSubmittedVote && !hasSubmittedVoteForThis && (
-                              <div className="px-4 py-2 bg-gray-600 text-gray-400 rounded-lg font-medium">
-                                —
-                              </div>
+                        {!isCurrentPlayer ? (
+                          <div className="flex-shrink-0 w-full sm:w-auto">
+                            {!hasSubmittedVote ? (
+                              hasVotedForThis ? (
+                                <button
+                                  onClick={() => setSelectedVote(null)}
+                                  className="w-full sm:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-all transform hover:scale-105"
+                                >
+                                  Cancel
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setSelectedVote(pc.playerId)}
+                                  disabled={selectedVote !== null && selectedVote !== pc.playerId}
+                                  className="w-full sm:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-all transform hover:scale-105"
+                                >
+                                  Vote
+                                </button>
+                              )
+                            ) : (
+                              hasSubmittedVoteForThis ? (
+                                <div className="w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-lg font-medium flex items-center justify-center gap-2">
+                                  <span>✓</span>
+                                  <span>Voted</span>
+                                </div>
+                              ) : (
+                                <div className="w-full sm:w-auto px-4 py-2 bg-gray-600 text-gray-400 rounded-lg font-medium text-center">
+                                  Not Voted
+                                </div>
+                              )
                             )}
                           </div>
-                        )}
-                        
-                        {isCurrentPlayer && (
-                          <div className="flex-shrink-0 px-4 py-2 bg-gray-600 text-gray-400 rounded-lg font-medium">
+                        ) : (
+                          <div className="flex-shrink-0 w-full sm:w-auto px-4 py-2 bg-gray-600 text-gray-400 rounded-lg font-medium text-center">
                             You
                           </div>
                         )}
@@ -343,6 +339,19 @@ export default function Game() {
                     );
                   })}
                 </div>
+                
+                {/* Submit Vote Button */}
+                {selectedVote && !hasSubmittedVote && (
+                  <div className="mt-6 flex justify-center">
+                    <button
+                      onClick={handleVoteSubmit}
+                      disabled={isSubmittingVote}
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                    >
+                      {isSubmittingVote ? 'Submitting...' : 'Submit Vote'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -365,7 +374,7 @@ export default function Game() {
                       )}
                       
                       {/* Word Grid as buttons */}
-                      <div className="grid grid-cols-4 gap-3 mb-6">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 mb-6">
                         {(Array.isArray(room?.wordGrid) ? room?.wordGrid : []).flat().map((word: string, index: number) => (
                           <button
                             key={index}
@@ -586,7 +595,7 @@ export default function Game() {
                   
                   {/* Final Scores */}
                   <div className="mb-8">
-                    <h3 className="text-xl font-semibold mb-4">Final Scores:</h3>
+                    <h3 className="text-xl font-bold mb-4">Final Scores:</h3>
                     <div className="space-y-4 max-w-md mx-auto">
                       {players
                         .sort((a, b) => (b.score || 0) - (a.score || 0))
@@ -628,7 +637,7 @@ export default function Game() {
         {!(room?.currentPhase === 'results') && !(room?.currentPhase === 'fakerGuess' && isFaker) && !(room?.currentPhase === 'finished') && (
           <div className="mb-8">
             <h2 className="text-2xl font-semibold mb-4">{room?.category || 'Word Grid'}</h2>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-4">
               {(room?.wordGrid || []).map((word, index) => {
                 const isSecretWord = (
                   (!isFaker && (room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting') && secretWord && word === secretWord && hasRevealedRole) ||
@@ -658,7 +667,7 @@ export default function Game() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {players.map((player) => (
                 <div 
-                  key={player.id}
+                  key={player.id} 
                   className={`p-4 bg-slate-700 rounded-lg ${player.id === currentPlayerId ? 'ring-2 ring-blue-500' : ''}`}
                 >
                   <div className="font-medium">{player.name}</div>
@@ -676,12 +685,12 @@ export default function Game() {
       
       {/* Footer */}
       {room?.currentPhase !== 'finished' && (
-        <div className={`flex items-center p-4 bg-slate-800 rounded-lg shadow-lg ${isHost ? 'justify-between' : 'justify-end'}`}>
+        <div className={`flex flex-col sm:flex-row gap-2 sm:gap-0 items-stretch sm:items-center p-4 bg-slate-800 rounded-lg shadow-lg ${isHost ? 'sm:justify-between' : 'sm:justify-end'}`}>
           {isHost && (
             <button
               onClick={handleEndGame}
               disabled={isEndingGame}
-              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
             >
               {isEndingGame ? 'Ending...' : 'End Game'}
             </button>
@@ -689,7 +698,7 @@ export default function Game() {
           <button
             onClick={handleLeaveGame}
             disabled={isLeaving}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+            className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
           >
             {isLeaving ? 'Leaving...' : 'Leave Game'}
           </button>
