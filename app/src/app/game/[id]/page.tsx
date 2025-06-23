@@ -100,7 +100,7 @@ export default function Game() {
     }
     
     try {
-      const result = await submitFakerGuess(roomId, playerId, selectedVote, room.currentRound || 1);
+      const result = await submitFakerGuess(roomId, playerId, selectedVote, room?.currentRound || 1);
       
       if (result.success) {
         setHasSubmittedVote(true);
@@ -390,7 +390,7 @@ export default function Game() {
                           const playerId = localStorage.getItem('playerId');
                           if (!playerId) return;
                           
-                          const result = await submitFakerGuess(roomId, playerId, fakerGuess, room.currentRound || 1);
+                          const result = await submitFakerGuess(roomId, playerId, fakerGuess, room?.currentRound || 1);
                           
                           if (!result.success) {
                             alert(`Error: ${result.error}`);
