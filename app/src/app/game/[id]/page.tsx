@@ -41,6 +41,7 @@ export default function Game() {
   const [isStartingNextRound, setIsStartingNextRound] = useState(false);
   const [hasSubmittedVote, setHasSubmittedVote] = useState(false);
   const [hasRevealedRole, setHasRevealedRole] = useState(false);
+  const [isSubmittingClue, setIsSubmittingClue] = useState(false);
 
   // Reset local state when round changes
   useEffect(() => {
@@ -100,7 +101,7 @@ export default function Game() {
     }
     
     try {
-      const result = await submitFakerGuess(roomId, playerId, selectedVote, room?.currentRound || 1);
+      const result = await submitVote(roomId, playerId, selectedVote, room?.currentRound || 1);
       
       if (result.success) {
         setHasSubmittedVote(true);
@@ -116,6 +117,33 @@ export default function Game() {
       setSelectedVote(null);
     } finally {
       setIsSubmittingVote(false);
+    }
+  };
+
+  const handleClueSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clue.trim() || isSubmittingClue || submittedClue) return;
+    
+    setIsSubmittingClue(true);
+    const playerId = localStorage.getItem('playerId');
+    if (!playerId) {
+      setIsSubmittingClue(false);
+      return;
+    }
+    
+    try {
+      const result = await submitClue(roomId, playerId, clue, room?.currentRound || 1);
+      
+      if (result.success) {
+        setSubmittedClue(true);
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Clue submission error:', error);
+      alert('Failed to submit clue. Please try again.');
+    } finally {
+      setIsSubmittingClue(false);
     }
   };
 
@@ -257,9 +285,9 @@ export default function Game() {
                   onRevealComplete={() => setHasRevealedRole(true)}
                   clue={clue}
                   onClueChange={setClue}
-                  onClueSubmit={() => {}}
+                  onClueSubmit={handleClueSubmit}
                   hasSubmittedClue={submittedClue}
-                  isSubmittingClue={false}
+                  isSubmittingClue={isSubmittingClue}
                 />
               </div>
             )}
