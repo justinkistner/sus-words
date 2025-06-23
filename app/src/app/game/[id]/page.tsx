@@ -27,15 +27,12 @@ export default function Game() {
     isLoading,
     error,
     isConnected,
-    connectionError,
-    submitClue,
-    submitVote
+    connectionError
   } = useGameRealtime(roomId);
   
   // Local state for clue form
   const [clue, setClue] = useState<string>('');
   const [submittedClue, setSubmittedClue] = useState<boolean>(false);
-  const [isSubmittingClue, setIsSubmittingClue] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isEndingGame, setIsEndingGame] = useState(false);
   const [selectedVote, setSelectedVote] = useState<string | null>(null);
@@ -51,31 +48,12 @@ export default function Game() {
       // Reset clue-related state for new round
       setClue('');
       setSubmittedClue(false);
-      setIsSubmittingClue(false);
       setSelectedVote(null);
-      setIsSubmittingVote(false);
+      setFakerGuess('');
       setHasSubmittedVote(false);
       setHasRevealedRole(false);
     }
   }, [room?.currentRound, room?.currentPhase]);
-
-  const handleClueSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    
-    if (!clue.trim() || isSubmittingClue) return;
-    
-    setIsSubmittingClue(true);
-    const result = await submitClue(clue.trim());
-    
-    if (result.success) {
-      setSubmittedClue(true);
-      setClue('');
-    } else {
-      alert(result.error || 'Failed to submit clue');
-    }
-    
-    setIsSubmittingClue(false);
-  };
 
   const handleLeaveGame = async () => {
     const playerId = localStorage.getItem('playerId');
@@ -122,7 +100,7 @@ export default function Game() {
     }
     
     try {
-      const result = await submitVote(selectedVote);
+      const result = await submitFakerGuess(roomId, playerId, selectedVote, room.currentRound || 1);
       
       if (result.success) {
         setHasSubmittedVote(true);
@@ -278,9 +256,9 @@ export default function Game() {
                   onRevealComplete={() => setHasRevealedRole(true)}
                   clue={clue}
                   onClueChange={setClue}
-                  onClueSubmit={handleClueSubmit}
+                  onClueSubmit={() => {}}
                   hasSubmittedClue={submittedClue}
-                  isSubmittingClue={isSubmittingClue}
+                  isSubmittingClue={false}
                 />
               </div>
             )}
