@@ -652,7 +652,7 @@ export default function Game() {
             <div className="grid grid-cols-4 gap-4">
               {(room.wordGrid || []).map((word, index) => {
                 const isSecretWord = (
-                  (!isFaker && room.currentPhase === 'clueGiving' && secretWord && word === secretWord && hasRevealedRole) ||
+                  (!isFaker && (room.currentPhase === 'clueGiving' || room.currentPhase === 'voting') && secretWord && word === secretWord && hasRevealedRole) ||
                   (room.currentPhase === 'results' && secretWord && word === secretWord)
                 );
                 return (
