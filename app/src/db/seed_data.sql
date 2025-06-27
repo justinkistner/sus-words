@@ -1,4 +1,4 @@
--- Seed data for Sus Words Game
+-- Seed data for Sus Word Game
 -- This file contains initial categories and words for the game
 
 -- Insert categories (overwrite if they already exist)

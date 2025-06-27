@@ -1,8 +1,8 @@
-# Sus Words Connection Issues Investigation
+# Sus Word Connection Issues Investigation
 
 ## Problem Statement
 
-The multiplayer Sus Words game has been experiencing persistent Supabase realtime connection issues that prevent basic functionality like:
+The multiplayer Sus Word game has been experiencing persistent Supabase realtime connection issues that prevent basic functionality like:
 - Players joining lobbies
 - Real-time updates in lobbies
 - Starting games

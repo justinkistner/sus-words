@@ -186,7 +186,7 @@ export default function Lobby() {
 
   const copyInviteLink = () => {
     const url = `${window.location.origin}/join`;
-    navigator.clipboard.writeText(`Join my Sus Words game! Room code: ${roomId}\n${url}`);
+    navigator.clipboard.writeText(`Join my Sus Word game! Room code: ${roomId}\n${url}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

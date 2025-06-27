@@ -1,4 +1,4 @@
--- RLS Policies for Sus Words Game
+-- RLS Policies for Sus Word Game
 -- This file contains additional RLS policies to allow proper game functionality
 
 -- Allow anyone to insert into players table (needed for anonymous users to create players)

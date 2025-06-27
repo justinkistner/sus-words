@@ -1,4 +1,4 @@
-# Sus Words Game Research
+# Sus Word Game Research
 
 ## Reel Fling Game Analysis
 
@@ -113,7 +113,7 @@ room.on(
 );
 ```
 
-## Implications for Sus Words Game
+## Implications for Sus Word Game
 
 ### Architecture Recommendations
 1. **Backend Options**:
@@ -137,7 +137,7 @@ room.on(
 3. **State Management**: Handling complex state transitions between game phases
 4. **Error Handling**: Gracefully managing disconnections and rejoins
 
-### Next Steps for Sus Words
+### Next Steps for Sus Word
 1. Choose between Supabase and Firebase based on familiarity and requirements
 2. Design database schema for game state
 3. Implement core real-time functionality:

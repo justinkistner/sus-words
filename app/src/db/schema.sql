@@ -1,4 +1,4 @@
--- Sus Words Game Database Schema
+-- Sus Word Game Database Schema
 
 -- Rooms table: Stores information about game rooms
 CREATE TABLE rooms (

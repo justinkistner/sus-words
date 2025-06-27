@@ -1,10 +1,10 @@
-# Sus Words - Multiplayer Social Deduction Game
+# Sus Word - Multiplayer Social Deduction Game
 
 A real-time multiplayer social deduction word game built with Next.js and Supabase. Players try to identify the "faker" who doesn't know the secret word while giving clues that relate to it.
 
 ## 🎮 Game Overview
 
-Sus Words is inspired by games like *The Chameleon* and *Spyfall*. Players are shown a grid of 16 words from a category, with one secret word highlighted for everyone except the "faker". Players give one-word clues related to the secret word, then vote to identify who they think is the faker.
+Sus Word is inspired by games like *The Chameleon* and *Spyfall*. Players are shown a grid of 16 words from a category, with one secret word highlighted for everyone except the "faker". Players give one-word clues related to the secret word, then vote to identify who they think is the faker.
 
 ### Game Flow
 1. **Lobby**: Players join a room using a 4-digit code
@@ -39,8 +39,8 @@ Sus Words is inspired by games like *The Chameleon* and *Spyfall*. Players are s
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/sus-words.git
-   cd sus-words
+   git clone https://github.com/yourusername/sus-word.git
+   cd sus-word
    ```
 
 2. **Install dependencies**
