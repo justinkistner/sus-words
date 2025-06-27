@@ -11,7 +11,6 @@ interface VideoHoverButtonProps {
   title: string;
   description: string;
   bgColorClass: string;
-  hoverBgColorClass: string;
 }
 
 export default function VideoHoverButton({
@@ -20,8 +19,7 @@ export default function VideoHoverButton({
   hoverVideo,
   title,
   description,
-  bgColorClass,
-  hoverBgColorClass
+  bgColorClass
 }: VideoHoverButtonProps) {
   const [isHovered, setIsHovered] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -44,7 +42,7 @@ export default function VideoHoverButton({
   return (
     <Link 
       href={href}
-      className={`relative flex flex-col items-center justify-between h-80 ${bgColorClass} ${hoverBgColorClass} rounded-xl transition-all transform hover:scale-105 overflow-hidden group`}
+      className={`relative flex flex-col items-center justify-between h-80 ${bgColorClass} rounded-xl transition-all transform hover:scale-105 overflow-hidden group`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
