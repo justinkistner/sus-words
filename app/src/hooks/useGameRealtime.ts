@@ -478,7 +478,7 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
       }
     );
     
-    // Subscribe to the channel
+    // Subscribe to the channel with improved error handling
     console.log('Subscribing to game channel...');
     channel.subscribe((status) => {
       console.log('Game channel status:', status);
@@ -488,12 +488,17 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
         setIsConnected(true);
         setConnectionError(null);
       } else if (status === 'CHANNEL_ERROR') {
-        console.error('❌ Failed to subscribe to game channel');
+        console.warn('⚠️ Channel error detected');
         setIsConnected(false);
-        setConnectionError('Failed to connect to game updates');
+        setConnectionError('Connection interrupted');
       } else if (status === 'CLOSED') {
-        console.log('Channel closed');
+        console.log('📡 Channel closed');
         setIsConnected(false);
+        setConnectionError('Connection lost');
+      } else if (status === 'TIMED_OUT') {
+        console.log('⏰ Connection timed out');
+        setIsConnected(false);
+        setConnectionError('Connection timed out');
       }
     });
     

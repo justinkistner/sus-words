@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { GamePhaseContainer } from './GamePhaseContainer';
 import { PlayerRow } from './PlayerRow';
 import { TimerSubmitButton } from './TimerSubmitButton';
@@ -46,6 +46,19 @@ export function UnifiedTurnBasedClueGiving({
   const currentTurnPlayer = players.find(p => p.id === currentTurnPlayerId);
   const isMyTurn = currentPlayerId === currentTurnPlayerId;
   
+  // Timer logic for compact submit button
+  const [timeRemaining, setTimeRemaining] = useState(20); // Default 20 seconds
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - turnStartedAt) / 1000);
+      const remaining = Math.max(0, 20 - elapsed); // Use 20 seconds to match existing turnTimeLimit
+      setTimeRemaining(remaining);
+    }, 100);
+    
+    return () => clearInterval(interval);
+  }, [turnStartedAt]);
+  
   console.log('UnifiedTurnBasedClueGiving Debug:', 
     'currentPlayerRole=', currentPlayerRole,
     'hasRevealedRole=', hasRevealedRole,
@@ -53,8 +66,6 @@ export function UnifiedTurnBasedClueGiving({
     'currentPlayerId=', currentPlayerId
   );
   
-  const turnTimeLimit = 20; // seconds
-
   const handleSubmitClue = async () => {
     await onClueSubmit(clue.trim());
   };
@@ -121,27 +132,40 @@ export function UnifiedTurnBasedClueGiving({
               <div className="flex items-center gap-3">
                 {/* For current turn player who is me - show input */}
                 {isCurrentTurn && isMe && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={clue}
-                      onChange={(e) => onClueChange(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !hasSubmittedClue && !isSubmittingClue) {
-                          handleSubmitClue();
-                        }
-                      }}
-                      placeholder="Enter your clue..."
-                      className="bg-slate-600 text-white px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-                      disabled={hasSubmittedClue || isSubmittingClue}
-                    />
-                    <TimerSubmitButton
-                      onClick={handleSubmitClue}
-                      disabled={!clue.trim() || hasSubmittedClue || isSubmittingClue}
-                      isSubmitting={isSubmittingClue}
-                      timeLimit={turnTimeLimit}
-                      startTime={turnStartedAt}
-                    />
+                  <div className="flex items-center w-full max-w-sm">
+                    {/* Connected input and submit button */}
+                    <div className="flex w-full">
+                      <input
+                        type="text"
+                        value={clue}
+                        onChange={(e) => onClueChange(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !hasSubmittedClue && !isSubmittingClue) {
+                            handleSubmitClue();
+                          }
+                        }}
+                        placeholder="Enter your clue..."
+                        className="bg-slate-600 text-white px-3 py-2 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-0"
+                        disabled={hasSubmittedClue || isSubmittingClue}
+                      />
+                      {/* Compact submit button with icon */}
+                      <button
+                        onClick={handleSubmitClue}
+                        disabled={!clue.trim() || hasSubmittedClue || isSubmittingClue}
+                        className={`px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-r-lg font-medium transition-all flex items-center justify-center min-w-[44px] ${
+                          timeRemaining < 5 && timeRemaining > 0 ? 'animate-pulse bg-red-600 hover:bg-red-700' : ''
+                        }`}
+                        title={isSubmittingClue ? 'Submitting...' : `Submit (${timeRemaining}s)`}
+                      >
+                        {isSubmittingClue ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
                 

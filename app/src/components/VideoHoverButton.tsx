@@ -42,12 +42,12 @@ export default function VideoHoverButton({
   return (
     <Link 
       href={href}
-      className={`relative flex flex-col items-center justify-between h-80 ${bgColorClass} rounded-xl transition-all transform hover:scale-105 overflow-hidden group`}
+      className={`relative flex flex-col items-center justify-between h-60 md:h-80 ${bgColorClass} rounded-xl transition-all transform hover:scale-105 overflow-hidden group`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
       {/* Background media - positioned in upper portion */}
-      <div className="relative w-full h-64">
+      <div className="relative w-full h-44 md:h-64">
         <Image
           src={staticImage}
           alt={`${title} background`}

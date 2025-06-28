@@ -889,3 +889,90 @@ export async function viewFinalScores(roomId: string): Promise<{ success: boolea
     };
   }
 }
+
+// Function to restart the game and return players to lobby
+export async function restartGame(roomId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createClient();
+    
+    console.log('🔄 Restarting game for room:', roomId);
+    
+    // Reset room to waiting phase with fresh state
+    const { error: roomUpdateError } = await supabase
+      .from('rooms')
+      .update({
+        current_phase: 'waiting',
+        current_round: 1,
+        button_holder_index: null,
+        current_turn_player_id: null,
+        turn_started_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', roomId);
+    
+    if (roomUpdateError) {
+      console.error('Error resetting room:', roomUpdateError);
+      throw new Error(`Failed to reset room: ${roomUpdateError.message}`);
+    }
+    
+    // Reset all players to not ready and clear roles
+    const { error: playersUpdateError } = await supabase
+      .from('players')
+      .update({
+        is_ready: false,
+        role: null,
+        turn_order: null,
+        score: 0,
+        is_ready_for_clues: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('room_id', roomId);
+    
+    if (playersUpdateError) {
+      console.error('Error resetting players:', playersUpdateError);
+      throw new Error(`Failed to reset players: ${playersUpdateError.message}`);
+    }
+    
+    // Clear all game data (votes, clues, rounds)
+    const { error: votesDeleteError } = await supabase
+      .from('votes')
+      .delete()
+      .eq('room_id', roomId);
+    
+    if (votesDeleteError) {
+      console.error('Error clearing votes:', votesDeleteError);
+      // Don't throw here, continue with cleanup
+    }
+    
+    const { error: cluesDeleteError } = await supabase
+      .from('clues')
+      .delete()
+      .eq('room_id', roomId);
+    
+    if (cluesDeleteError) {
+      console.error('Error clearing clues:', cluesDeleteError);
+      // Don't throw here, continue with cleanup
+    }
+    
+    const { error: roundsDeleteError } = await supabase
+      .from('game_rounds')
+      .delete()
+      .eq('room_id', roomId);
+    
+    if (roundsDeleteError) {
+      console.error('Error clearing rounds:', roundsDeleteError);
+      // Don't throw here, continue with cleanup
+    }
+    
+    console.log('✅ Game successfully restarted, players returned to lobby');
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error restarting game:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to restart game' 
+    };
+  }
+}

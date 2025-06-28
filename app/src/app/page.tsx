@@ -11,8 +11,8 @@ export default function Home() {
             <Image 
               src="/sus-words-logo.png" 
               alt="Sus Word Logo" 
-              width={256} 
-              height={256}
+              width={200} 
+              height={200}
               className="mx-auto"
             />
           </div>
@@ -20,11 +20,11 @@ export default function Home() {
             Sus Word
           </h1>
           <p className="text-xl md:text-2xl text-slate-300 mb-8">
-            A social deduction word game for players and fakers
+            Prove you know the secret word, or fool everyone by figuring it out
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl">
+        <div className="grid grid-cols-2 gap-4 w-full max-w-2xl">
           <VideoHoverButton
             href="/create"
             staticImage="/create-game.png"

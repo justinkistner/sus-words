@@ -1,16 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
 
-export default function JoinGame() {
+function JoinGameForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [roomCode, setRoomCode] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState('');
+
+  // Auto-populate room code from URL parameter
+  useEffect(() => {
+    const roomParam = searchParams.get('room');
+    if (roomParam) {
+      setRoomCode(roomParam.toUpperCase());
+    }
+  }, [searchParams]);
 
   const supabase = createClient();
 
@@ -155,5 +164,17 @@ export default function JoinGame() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function JoinGame() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-slate-800 to-slate-900">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-400"></div>
+      </div>
+    }>
+      <JoinGameForm />
+    </Suspense>
   );
 }

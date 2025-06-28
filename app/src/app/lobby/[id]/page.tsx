@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { useLobbyRealtime } from '@/hooks/useLobbyRealtime';
 import { leaveGame, initializeTurnOrder } from '@/lib/gameActions';
+import Image from 'next/image';
 
 export default function Lobby() {
   const params = useParams();
@@ -16,6 +17,7 @@ export default function Lobby() {
   const [copied, setCopied] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [shouldNavigateHome, setShouldNavigateHome] = useState(false);
 
   // Use the new combined hook for lobby data and realtime
   const {
@@ -33,14 +35,22 @@ export default function Lobby() {
 
   const supabase = createClient();
 
-  // Redirect if no player ID
-  if (typeof window !== 'undefined') {
-    const playerId = localStorage.getItem('playerId');
-    if (!playerId) {
+  // Handle navigation after leaving game to avoid React Router warning
+  useEffect(() => {
+    if (shouldNavigateHome) {
       router.push('/');
-      return null;
     }
-  }
+  }, [shouldNavigateHome, router]);
+
+  // Redirect if no player ID (moved to useEffect to avoid setState during render)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const playerId = localStorage.getItem('playerId');
+      if (!playerId) {
+        router.push('/');
+      }
+    }
+  }, [router]);
 
   const toggleReady = async () => {
     const playerId = localStorage.getItem('playerId');
@@ -199,8 +209,8 @@ export default function Lobby() {
   };
 
   const copyInviteLink = () => {
-    const url = `${window.location.origin}/join`;
-    navigator.clipboard.writeText(`Join my Sus Word game! Room code: ${roomId}\n${url}`);
+    const url = `${window.location.origin}/join?room=${roomId}`;
+    navigator.clipboard.writeText(`Join my Sus Word game!\n${url}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -219,7 +229,8 @@ export default function Lobby() {
     const result = await leaveGame(roomId, playerId);
     
     if (result.success) {
-      router.push('/');
+      // Use state flag to trigger navigation in useEffect
+      setShouldNavigateHome(true);
     } else {
       alert(result.error || 'Failed to leave game');
       setIsLeaving(false);
@@ -274,86 +285,115 @@ export default function Lobby() {
   }
 
   return (
-    <div className="flex flex-col items-center min-h-screen p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
-      <div className="w-full max-w-4xl">
-        <div className="bg-slate-800/70 p-6 rounded-xl shadow-lg mb-6">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">
-              {room?.name || 'Game Lobby'}
-            </h1>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={copyInviteLink}
-                className="p-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm transition-colors flex items-center"
-              >
-                {copied ? 'Copied!' : 'Copy Invite'}
-              </button>
-              <div className="text-sm bg-slate-700 p-2 rounded relative">
-                <span className="text-slate-400">Room Code: </span>
-                <span 
-                  className="font-mono font-bold cursor-pointer hover:text-blue-400 transition-colors"
-                  onClick={copyRoomCode}
-                  title="Click to copy"
-                >
-                  {roomId}
-                </span>
-                {codeCopied && (
-                  <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-green-600 text-white text-xs px-2 py-1 rounded">
-                    Copied!
-                  </span>
-                )}
+    <div className="min-h-screen bg-gradient-to-b from-slate-800 to-slate-900 text-white">
+      <div className="w-full max-w-4xl mx-auto p-6">
+        <div className="relative flex items-center justify-between mb-6 pb-6">
+            {/* Logo */}
+            <div className="flex items-center">
+              <Image 
+                src="/sus-words-logo.png" 
+                alt="Sus Words Logo" 
+                width={48} 
+                height={48}
+                className="mr-3"
+              />
+            </div>
+            
+            {/* Room Name - Absolutely centered */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 text-center">
+              <h1 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">
+                {room?.name || 'Game Lobby'}
+              </h1>
+              <div className="text-xs text-slate-400 uppercase tracking-wide mt-1">
+                ROOM
               </div>
+            </div>
+            
+            {/* Status message for non-hosts or Start Game button for host */}
+            <div className="text-right">
+              {isHost ? (
+                <button
+                  onClick={startGame}
+                  disabled={isStartingGame || players.length < 3 || !players.every(p => p.isReady)}
+                  className={`px-4 py-2 rounded font-medium transition-colors ${
+                    (isStartingGame || players.length < 3 || !players.every(p => p.isReady))
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
+                >
+                  {isStartingGame ? 'Starting...' : 'Start Game'}
+                </button>
+              ) : (
+                <div className="text-sm text-slate-400 text-right max-w-24">
+                  Waiting for host to start
+                </div>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h2 className="text-xl font-semibold mb-3 text-slate-300">Players</h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-semibold text-slate-300">Players</h2>
+                <button
+                  onClick={copyInviteLink}
+                  className="p-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm transition-colors flex items-center"
+                >
+                  {copied ? 'Copied!' : 'Copy Invite'}
+                </button>
+              </div>
+              <p className="text-sm text-slate-400 mb-3">Mark yourself as ready when you are ready.</p>
               <div className="bg-slate-700/50 rounded-lg p-4">
                 {players.length === 0 ? (
                   <p className="text-slate-400 text-center">No players have joined yet</p>
                 ) : (
                   <ul className="space-y-2">
-                    {players.map((player) => (
-                      <li key={player.id} className="flex items-center justify-between p-2 bg-slate-700 rounded">
-                        <div className="flex items-center">
-                          <span className="font-medium">{player.name}</span>
-                          {player.isHost && (
-                            <span className="ml-2 text-xs bg-indigo-600 px-2 py-0.5 rounded-full">Host</span>
+                    {players.map((player) => {
+                      const currentPlayerId = typeof window !== 'undefined' ? localStorage.getItem('playerId') : null;
+                      const isCurrentPlayer = player.id === currentPlayerId;
+                      
+                      return (
+                        <li key={player.id} className="flex items-center justify-between p-2 bg-slate-700 rounded">
+                          <div className="flex items-center">
+                            <span className="font-medium">
+                              {isCurrentPlayer ? 'You' : player.name}
+                            </span>
+                            {player.isHost && (
+                              <span className="ml-2 text-xs bg-indigo-600 px-2 py-0.5 rounded-full">Host</span>
+                            )}
+                          </div>
+                          {isCurrentPlayer ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-slate-300">
+                                {isReady ? 'Ready' : 'Not Ready'}
+                              </span>
+                              <button
+                                onClick={handleToggleReady}
+                                className="relative inline-flex h-6 w-12 items-center rounded-full bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                              >
+                                <span className="sr-only">Toggle ready status</span>
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full transition-all ${
+                                    isReady 
+                                      ? 'translate-x-7 bg-green-600' 
+                                      : 'translate-x-1 bg-red-600'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className={`w-3 h-3 rounded-full ${player.isReady ? 'bg-green-600' : 'bg-red-600'}`}></div>
                           )}
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${player.isReady ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      </li>
-                    ))}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
-                <div className="mt-4 pt-4 border-t border-slate-600">
-                  <div className="flex items-center justify-between p-3 bg-slate-600/50 rounded-lg">
-                    <span className="font-medium">
-                      Your Status: <span className={isReady ? 'text-green-400' : 'text-gray-400'}>
-                        {isReady ? 'Ready' : 'Not Ready'}
-                      </span>
-                    </span>
-                    <button
-                      onClick={handleToggleReady}
-                      className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
-                        isReady ? 'bg-green-600' : 'bg-gray-600'
-                      }`}
-                    >
-                      <span className="sr-only">Toggle ready status</span>
-                      <span
-                        className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                          isReady ? 'translate-x-9' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
 
             <div>
-              <h2 className="text-xl font-semibold mb-3 text-slate-300">Game Settings</h2>
+              <h2 className="text-xl font-semibold text-slate-300 mb-3">Game Settings</h2>
               <div className="bg-slate-700/50 rounded-lg p-4 space-y-3">
                 <div className="flex justify-between">
                   <span className="text-slate-400">Game Mode:</span>
@@ -375,23 +415,13 @@ export default function Lobby() {
             </div>
           </div>
 
-          <div className="mt-6 flex justify-between">
+          <div className="mt-6">
             <button
               onClick={handleLeaveGame}
               className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
             >
               Leave Game
             </button>
-
-            {isHost && (
-              <button
-                onClick={startGame}
-                disabled={isStartingGame || players.length < 3 || !players.every(p => p.isReady)}
-                className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors"
-              >
-                {isStartingGame ? 'Starting...' : 'Start Game'}
-              </button>
-            )}
           </div>
 
           {(error || connectionError) && (
@@ -405,7 +435,6 @@ export default function Lobby() {
           <div className="mt-4 text-sm text-gray-400">
             Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
           </div>
-        </div>
       </div>
     </div>
   );

@@ -158,7 +158,13 @@ export function useLobbyData(roomId: string): UseLobbyDataReturn {
   }, []);
 
   const removePlayer = useCallback((playerId: string) => {
-    setPlayers(prev => prev.filter(player => player.id !== playerId));
+    console.log('🗑️ removePlayer called for:', playerId);
+    setPlayers(prev => {
+      const filtered = prev.filter(player => player.id !== playerId);
+      console.log('Players before filter:', prev.map(p => p.id));
+      console.log('Players after filter:', filtered.map(p => p.id));
+      return filtered;
+    });
   }, []);
 
   // Refresh data function (for manual refresh)

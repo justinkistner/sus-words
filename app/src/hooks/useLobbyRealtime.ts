@@ -116,10 +116,17 @@ export function useLobbyRealtime(roomId: string): UseLobbyRealtimeReturn {
               setIsReady(player.isReady);
             }
           } else if (payload.eventType === 'DELETE') {
-            // Player left
-            const leftPlayerId = payload.old.player_id;
-            console.log(`Player ${leftPlayerId} left the room`);
-            removePlayer(leftPlayerId);
+            // Player left - payload.old only contains the room_players table id
+            const roomPlayersId = payload.old.id;
+            console.log(`🚪 Room player record ${roomPlayersId} deleted`);
+            console.log('DELETE payload:', payload.old);
+            
+            // Since we don't have player_id in the DELETE payload, refresh data to get updated list
+            // Use setTimeout to avoid setState during render
+            setTimeout(() => {
+              console.log('Refreshing data after player left');
+              refreshData();
+            }, 0);
           }
         } catch (error) {
           console.error('Error handling player change:', error);

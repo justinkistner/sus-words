@@ -2,10 +2,11 @@
 
 import { useState, FormEvent, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase';
 import { GamePhase, Player } from '@/types/game';
 import { useGameRealtime } from '@/hooks/useGameRealtime';
-import { leaveGame, endGame, submitClue, submitVote, submitFakerGuess, startNextRound, viewFinalScores } from '@/lib/gameActions';
+import { leaveGame, endGame, submitClue, submitVote, submitFakerGuess, startNextRound, viewFinalScores, restartGame } from '@/lib/gameActions';
 import { Confetti } from '@/components/Confetti';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import { Toast } from '@/components/Toast';
@@ -357,26 +358,29 @@ export default function Game() {
         <ConnectionStatus isConnected={isConnected} connectionError={connectionError} onRetry={refreshConnection} />
         
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2 sm:gap-0">
-          <div className="flex items-center gap-3">
-            {/* Game logo in upper left */}
-            <img 
+        <div className="grid grid-cols-3 items-center mb-6 gap-4">
+          {/* Left: Game logo */}
+          <div className="flex items-center justify-start">
+            <Image 
               src="/sus-words-logo.png" 
-              alt="Sus Words" 
-              className="h-10 sm:h-12 w-auto"
+              alt="Sus Words Logo" 
+              width={48} 
+              height={48}
+              className="mr-3"
             />
           </div>
           
-          {/* Centered room name */}
-          <div className="flex-1 text-center">
-            <h1 className="text-lg sm:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">{room?.name || 'Loading...'}</h1>
-            <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">ROOM</p>
+          {/* Center: Room name - truly centered */}
+          <div className="text-center">
+            <h1 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">{room?.name || 'Loading...'}</h1>
+            <p className="text-xs text-slate-400 uppercase tracking-wide mt-1">ROOM</p>
           </div>
           
-          <div className="text-right">
+          {/* Right: Round counter or Next Round button */}
+          <div className="flex justify-end">
             {/* Show round counter only when not in results phase */}
             {room?.currentPhase !== 'results' && (
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-400 text-right">
                 Round {room?.currentRound || 0} of {room?.totalRounds || 3}
               </p>
             )}
@@ -427,7 +431,7 @@ export default function Game() {
                           }
                         }}
                         disabled={isStartingNextRound}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded font-medium transition-colors"
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded font-medium transition-colors text-sm"
                       >
                         {isStartingNextRound ? 'Starting...' : `Start round ${(room?.currentRound || 0) + 1} of ${room?.totalRounds || 1}`}
                       </button>
@@ -435,29 +439,25 @@ export default function Game() {
                       <button
                         onClick={async () => {
                           const result = await viewFinalScores(roomId);
-                          if (result.success) {
-                            setToastMessage('Final scores viewed!');
-                            setToastType('success');
-                            setShowToast(true);
-                          } else {
+                          if (!result.success) {
                             setToastMessage(`Error: ${result.error}`);
                             setToastType('error');
                             setShowToast(true);
                           }
                         }}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors text-sm"
                       >
                         View Final Score
                       </button>
                     )}
                   </>
                 ) : (
-                  <div className="text-center p-4 bg-gray-800 rounded-lg">
-                    <p className="text-gray-300">
+                  <div className="text-right">
+                    <p className="text-xs text-gray-300">
                       {room?.currentRound < room?.totalRounds ? (
                         <>Waiting for host to start round {(room?.currentRound || 0) + 1} of {room?.totalRounds || 1}...</>
                       ) : (
-                        <>Waiting for host to view final scores...</>
+                        <>Waiting for host to reveal the final score...</>
                       )}
                     </p>
                   </div>
@@ -681,14 +681,12 @@ export default function Game() {
               <div className="space-y-6">
                 <Confetti />
                 <div className="text-center">
-                  <h2 className="text-4xl font-bold mb-2 text-yellow-400">🎉 Game Over! 🎉</h2>
-                  
                   {/* Winner Announcement */}
                   {players.length > 0 && (
                     <div className="mb-8">
                       <p className="text-2xl mb-2">The winner is...</p>
                       <p className="text-5xl font-bold text-yellow-400 animate-pulse">
-                        {players.sort((a, b) => (b.score || 0) - (a.score || 0))[0].name}!
+                        🎉 {players.sort((a, b) => (b.score || 0) - (a.score || 0))[0].name}! 🎉
                       </p>
                       <p className="text-xl mt-2 text-gray-300">
                         with {players.sort((a, b) => (b.score || 0) - (a.score || 0))[0].score || 0} points
@@ -698,7 +696,7 @@ export default function Game() {
                   
                   {/* Final Scores */}
                   <div className="mb-8">
-                    <h3 className="text-xl font-bold mb-4">Final Scores:</h3>
+                    <h3 className="text-xl font-bold mb-4">Final Scores</h3>
                     <div className="space-y-4 max-w-md mx-auto">
                       {players
                         .sort((a, b) => (b.score || 0) - (a.score || 0))
@@ -706,16 +704,16 @@ export default function Game() {
                           <div 
                             key={player.id} 
                             className={`flex justify-between items-center p-3 rounded-lg ${
-                              index === 0 ? 'bg-yellow-600 bg-opacity-30 border-2 border-yellow-400' : 'bg-slate-600'
+                              index === 0 ? 'bg-yellow-700 bg-opacity-30 border-2 border-yellow-400' : 'bg-slate-600'
                             }`}
                           >
                             {index === 0 && <span className="text-2xl">🏆</span>}
                             {index === 1 && <span className="text-2xl">🥈</span>}
                             {index === 2 && <span className="text-2xl">🥉</span>}
-                            <span className={`font-medium ${index === 0 ? 'text-yellow-400' : ''}`}>
+                            <span className={`font-bold ${index === 0 ? 'text-yellow-200' : 'text-white'}`}>
                               {player.name}
                             </span>
-                            <span className={`text-lg font-bold ${index === 0 ? 'text-yellow-400' : 'text-gray-300'}`}>
+                            <span className={`text-lg font-bold ${index === 0 ? 'text-yellow-200' : 'text-gray-300'}`}>
                               {player.score || 0} points
                             </span>
                           </div>
@@ -723,9 +721,19 @@ export default function Game() {
                     </div>
                   </div>
                   
-                  {/* Return Home Button */}
+                  {/* Play Again Button */}
                   <button
-                    onClick={() => router.push('/')}
+                    onClick={async () => {
+                      const result = await restartGame(roomId);
+                      if (result.success) {
+                        // Redirect to lobby after successful restart
+                        router.push(`/lobby?room=${roomId}`);
+                      } else {
+                        setToastMessage(`Error restarting game: ${result.error}`);
+                        setToastType('error');
+                        setShowToast(true);
+                      }
+                    }}
                     className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
                   >
                     Play Again
@@ -807,6 +815,11 @@ export default function Game() {
           </button>
         </div>
       )}
+      
+      {/* Copyright Footer */}
+      <footer className="mt-8 text-center text-slate-400 text-sm py-4">
+        <p>Sus Word Game &copy; {new Date().getFullYear()}</p>
+      </footer>
     </div>
   );
 }
