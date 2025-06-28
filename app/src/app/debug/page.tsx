@@ -20,7 +20,7 @@ export default function DebugPage() {
         .order('created_at', { ascending: false })
         .limit(1);
       
-      const room = rooms?.[0];
+      const room = rooms?.[0] as any;
       
       // Get players if room exists
       let players: any[] = [];
@@ -28,7 +28,7 @@ export default function DebugPage() {
         const { data } = await supabase
           .from('room_players')
           .select('*')
-          .eq('room_id', room.id);
+          .eq('room_id', room.id as string);
         players = (data as any[]) || [];
       }
       
