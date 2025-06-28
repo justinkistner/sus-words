@@ -89,8 +89,9 @@ export default function Game() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   
-  // Role visibility logic: respect hasRevealedRole during wordReveal phase to prevent spoilers
-  const isRoleRevealed = hasRevealedRole || (room?.currentPhase && room.currentPhase !== 'roleAssignment' as GamePhase && room.currentPhase !== 'wordReveal' as GamePhase) || false;
+  // Role visibility logic: primarily depend on hasRevealedRole to prevent spoilers during round transitions
+  // Only show roles if explicitly revealed OR in specific non-transition phases
+  const isRoleRevealed = hasRevealedRole || (room?.currentPhase === 'clueGiving' as GamePhase || room?.currentPhase === 'voting' as GamePhase || room?.currentPhase === 'fakerGuess' as GamePhase);
   
   // Track previous round to detect round changes
   const prevRoundRef = useRef<number | undefined>(undefined);
