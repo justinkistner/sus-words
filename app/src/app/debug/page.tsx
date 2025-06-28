@@ -23,13 +23,13 @@ export default function DebugPage() {
       const room = rooms?.[0];
       
       // Get players if room exists
-      let players = [];
+      let players: any[] = [];
       if (room) {
         const { data } = await supabase
           .from('room_players')
           .select('*')
           .eq('room_id', room.id);
-        players = data || [];
+        players = (data as any[]) || [];
       }
       
       setDebugInfo({
