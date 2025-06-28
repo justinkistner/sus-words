@@ -225,10 +225,14 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
             localStorage.setItem('playerId', matchingPlayer.id);
             setCurrentPlayerId(matchingPlayer.id);
           } else {
-            console.error('Could not find player with name:', storedPlayerName);
+            console.log('Player with name "' + storedPlayerName + '" no longer in game (likely left)');
+            // Player has left the game, stop trying to reconnect
+            setCurrentPlayerId(null);
           }
         } else {
-          console.error('No player ID or name found in localStorage!');
+          console.log('No player ID or name in localStorage (player likely left game)');
+          // Player has left the game, stop trying to reconnect
+          setCurrentPlayerId(null);
         }
       }
     } catch (err: any) {
@@ -385,6 +389,18 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
       async (payload) => {
         console.log('🎮 Room update received:', payload);
         const normalizedRoom = normalizeRoomData(payload.new);
+        const oldRoom = normalizeRoomData(payload.old);
+        
+        // Check for host change
+        const playerId = localStorage.getItem('playerId');
+        if (playerId && oldRoom.hostId !== normalizedRoom.hostId && normalizedRoom.hostId === playerId) {
+          console.log('👑 Host reassignment detected - I am the new host!');
+          // Trigger a custom event that the game page can listen to
+          window.dispatchEvent(new CustomEvent('hostReassigned', {
+            detail: { newHostId: normalizedRoom.hostId }
+          }));
+        }
+        
         setRoom(normalizedRoom);
         setCurrentTurnPlayerId(normalizedRoom.currentTurnPlayerId ?? null);
         setTurnStartedAt(normalizedRoom.turnStartedAt ?? null);
@@ -400,6 +416,12 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
           setPlayerClues([]);
           setPlayerVotes([]);
           setFakerGuessResult(null);
+        }
+        
+        // Check if game was reset to lobby (phase changed from active game to waiting)
+        if (room?.currentPhase !== 'waiting' && normalizedRoom.currentPhase === 'waiting') {
+          console.log('🔄 Game reset to lobby detected');
+          window.dispatchEvent(new CustomEvent('gameResetToLobby'));
         }
         
         // If phase changed or round changed, refresh all data

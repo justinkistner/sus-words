@@ -54,7 +54,7 @@ function JoinGameForm() {
         return;
       }
 
-      if (roomData.current_phase !== 'lobby') {
+      if (roomData.current_phase !== 'lobby' && roomData.current_phase !== 'waiting') {
         setError('This game has already started.');
         setIsJoining(false);
         return;

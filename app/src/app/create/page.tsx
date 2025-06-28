@@ -149,11 +149,20 @@ export default function CreateGame() {
               type="text"
               id="roomName"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= 14) {
+                  setName(value);
+                }
+              }}
+              maxLength={14}
               className="w-full p-3 bg-slate-700 rounded border border-slate-600 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              placeholder="Enter room name"
+              placeholder="Enter room name (max 14 chars)"
               required
             />
+            <div className="text-xs text-slate-400 mt-1">
+              {name.length}/14 characters
+            </div>
           </div>
 
           <div>

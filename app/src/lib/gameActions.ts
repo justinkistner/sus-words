@@ -51,10 +51,40 @@ interface ScoreUpdate {
   points: number;
 }
 
-export async function leaveGame(roomId: string, playerId: string): Promise<{ success: boolean; error?: string }> {
+export async function leaveGame(roomId: string, playerId: string): Promise<{ success: boolean; error?: string; newHostId?: string; gameReset?: boolean }> {
   const supabase = createClient();
+  const MINIMUM_PLAYERS = 3;
   
   try {
+    // First, get current room and player data
+    const { data: roomData, error: roomError } = await supabase
+      .from('rooms')
+      .select('host_id, current_phase, current_round')
+      .eq('id', roomId)
+      .single();
+      
+    if (roomError) throw new Error(roomError.message);
+    
+    const { data: allPlayers, error: playersError } = await supabase
+      .from('room_players')
+      .select('player_id, is_host')
+      .eq('room_id', roomId);
+      
+    if (playersError) throw new Error(playersError.message);
+    
+    const wasHost = (roomData as RoomData).host_id === playerId;
+    const remainingPlayerCount = (allPlayers?.length || 1) - 1; // -1 because we're removing this player
+    // A game is in progress if it's not in lobby/waiting states
+    const isGameInProgress = (roomData as any).current_phase !== 'waiting' && (roomData as any).current_phase !== 'lobby';
+    
+    console.log('🚪 Player leaving:', {
+      playerId,
+      wasHost,
+      remainingPlayerCount,
+      isGameInProgress,
+      currentPhase: (roomData as any).current_phase
+    });
+    
     // Remove player from room_players
     const { error: removeError } = await supabase
       .from('room_players')
@@ -64,61 +94,121 @@ export async function leaveGame(roomId: string, playerId: string): Promise<{ suc
       
     if (removeError) throw new Error(removeError.message);
     
-    // Check if this player was the host
-    const { data: roomData, error: roomError } = await supabase
-      .from('rooms')
-      .select('host_id')
-      .eq('id', roomId)
-      .single();
+    // Scenario 1: Last player leaving - delete room
+    if (remainingPlayerCount === 0) {
+      console.log('🗑️ Last player leaving, deleting room');
       
-    if (roomError) throw new Error(roomError.message);
+      const { error: deleteRoomError } = await supabase
+        .from('rooms')
+        .delete()
+        .eq('id', roomId);
+        
+      if (deleteRoomError) throw new Error(deleteRoomError.message);
+      
+      return { success: true };
+    }
     
-    // If the leaving player was the host, we need to handle it
-    if ((roomData as RoomData).host_id === playerId) {
-      // Check if there are other players
-      const { data: remainingPlayers, error: playersError } = await supabase
+    // Scenario 2: Below minimum players - reset to lobby (regardless of game state)
+    if (remainingPlayerCount < MINIMUM_PLAYERS) {
+      console.log('🔄 Below minimum players during game, resetting to lobby');
+      
+      // Reset room to lobby state
+      const { error: resetError } = await supabase
+        .from('rooms')
+        .update({
+          current_phase: 'waiting',
+          current_round: 1,
+          button_holder_index: null,
+          current_turn_player_id: null,
+          turn_started_at: null
+        })
+        .eq('id', roomId);
+        
+      if (resetError) throw new Error(resetError.message);
+      
+      // Clear game data
+      await Promise.all([
+        supabase.from('clues').delete().eq('room_id', roomId),
+        supabase.from('votes').delete().eq('room_id', roomId),
+        supabase.from('game_rounds').delete().eq('room_id', roomId),
+        supabase.from('room_players').update({ 
+          score: 0, 
+          role: null, 
+          turn_order: null,
+          is_ready_for_clues: false
+        }).eq('room_id', roomId)
+      ]);
+      
+      // Handle host reassignment if needed
+      let newHostId = null;
+      if (wasHost) {
+        const { data: remainingPlayers } = await supabase
+          .from('room_players')
+          .select('player_id')
+          .eq('room_id', roomId)
+          .limit(1);
+          
+        if (remainingPlayers && remainingPlayers.length > 0) {
+          newHostId = (remainingPlayers as Player[])[0].player_id;
+          
+          await Promise.all([
+            supabase.from('rooms').update({ host_id: newHostId }).eq('id', roomId),
+            supabase.from('room_players').update({ is_host: true }).eq('room_id', roomId).eq('player_id', newHostId)
+          ]);
+        }
+      }
+      
+      return { success: true, newHostId, gameReset: true };
+    }
+    
+    // Scenario 3: Handle host reassignment (game continues)
+    let newHostId = null;
+    if (wasHost) {
+      console.log('👑 Host left, assigning new host');
+      
+      const { data: remainingPlayers } = await supabase
         .from('room_players')
         .select('player_id')
-        .eq('room_id', roomId);
+        .eq('room_id', roomId)
+        .limit(1);
         
-      if (playersError) throw new Error(playersError.message);
-      
       if (remainingPlayers && remainingPlayers.length > 0) {
-        // Assign a new host (first remaining player)
-        const newHostId = (remainingPlayers as Player[])[0].player_id;
+        newHostId = (remainingPlayers as Player[])[0].player_id;
         
-        // Update room with new host
-        const { error: updateRoomError } = await supabase
-          .from('rooms')
-          .update({ host_id: newHostId })
-          .eq('id', roomId);
-          
-        if (updateRoomError) throw new Error(updateRoomError.message);
+        await Promise.all([
+          supabase.from('rooms').update({ host_id: newHostId }).eq('id', roomId),
+          supabase.from('room_players').update({ is_host: true }).eq('room_id', roomId).eq('player_id', newHostId)
+        ]);
         
-        // Update room_players to mark new host
-        const { error: updateHostError } = await supabase
-          .from('room_players')
-          .update({ is_host: true })
-          .eq('room_id', roomId)
-          .eq('player_id', newHostId);
-          
-        if (updateHostError) throw new Error(updateHostError.message);
-      } else {
-        // No players left, delete the room
-        const { error: deleteRoomError } = await supabase
-          .from('rooms')
-          .delete()
-          .eq('id', roomId);
-          
-        if (deleteRoomError) throw new Error(deleteRoomError.message);
+        console.log('✅ New host assigned:', newHostId);
       }
     }
     
-    // Clear local storage
-    localStorage.removeItem('playerId');
-    localStorage.removeItem('playerName');
+    // Scenario 4: If game in progress, remove player from turn order and active game data
+    if (isGameInProgress) {
+      console.log('🎮 Removing player from active game');
+      
+      // Remove player's clues and votes for current game
+      await Promise.all([
+        supabase.from('clues').delete().eq('room_id', roomId).eq('player_id', playerId),
+        supabase.from('votes').delete().eq('room_id', roomId).eq('voter_id', playerId),
+        supabase.from('votes').delete().eq('room_id', roomId).eq('voted_for_id', playerId)
+      ]);
+      
+      // Update turn order if this player was in the current turn sequence
+      const { data: currentRoom } = await supabase
+        .from('rooms')
+        .select('current_turn_player_id, button_holder_index')
+        .eq('id', roomId)
+        .single();
+        
+      if (currentRoom && (currentRoom as any).current_turn_player_id === playerId) {
+        // If it was this player's turn, advance to next player
+        await advanceToNextTurn(roomId);
+      }
+    }
     
-    return { success: true };
+    return { success: true, newHostId, gameReset: false };
   } catch (error) {
     console.error('Error leaving game:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to leave game';

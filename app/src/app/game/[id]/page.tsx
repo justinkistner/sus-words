@@ -149,6 +149,35 @@ export default function Game() {
     prevPhaseRef.current = room?.currentPhase;
   }, [room?.currentRound, room?.currentPhase]);
 
+  // Listen for host reassignment and game reset events
+  useEffect(() => {
+    const handleHostReassigned = (event: CustomEvent) => {
+      console.log('🎉 I am now the host!');
+      setToastMessage('The previous host left. You are now the host!');
+      setToastType('info');
+      setShowToast(true);
+    };
+
+    const handleGameResetToLobby = () => {
+      console.log('🔄 Game reset to lobby due to insufficient players');
+      setToastMessage('Game ended due to insufficient players. Returning to lobby...');
+      setToastType('info');
+      setShowToast(true);
+      // Redirect to lobby after showing the message
+      setTimeout(() => {
+        router.push(`/lobby/${roomId}`);
+      }, 3000);
+    };
+
+    window.addEventListener('hostReassigned', handleHostReassigned as EventListener);
+    window.addEventListener('gameResetToLobby', handleGameResetToLobby);
+
+    return () => {
+      window.removeEventListener('hostReassigned', handleHostReassigned as EventListener);
+      window.removeEventListener('gameResetToLobby', handleGameResetToLobby);
+    };
+  }, [roomId, router]);
+
   const handleLeaveGame = async () => {
     const playerId = localStorage.getItem('playerId');
     if (!playerId || isLeaving) return;
@@ -157,7 +186,21 @@ export default function Game() {
     const result = await leaveGame(roomId, playerId);
     
     if (result.success) {
-      router.push('/');
+      // Clear local storage when leaving
+      localStorage.removeItem('playerId');
+      localStorage.removeItem('playerName');
+      
+      if (result.gameReset) {
+        // Game was reset to lobby due to insufficient players
+        setToastMessage('Game ended due to insufficient players. Returning to lobby.');
+        setToastType('info');
+        setShowToast(true);
+        // Redirect to lobby instead of home
+        setTimeout(() => router.push(`/lobby/${roomId}`), 2000);
+      } else {
+        // Normal leave - go to home
+        router.push('/');
+      }
     } else {
       setToastMessage(result.error || 'Failed to leave game');
       setToastType('error');

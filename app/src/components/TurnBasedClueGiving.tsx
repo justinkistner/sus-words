@@ -48,7 +48,30 @@ export default function TurnBasedClueGiving({
   onRevealComplete
 }: TurnBasedClueGivingProps) {
   const [timeRemaining, setTimeRemaining] = useState(60);
+  const [clueError, setClueError] = useState('');
   const [showToast, setShowToast] = useState(false);
+  
+  // Validate clue input
+  const validateClue = (value: string): string => {
+    if (value.length > 24) {
+      return 'Clues must be 24 characters or less';
+    }
+    if (value.includes(' ') || value.split(/\s+/).length > 1) {
+      return 'Clues can only be a single word';
+    }
+    return '';
+  };
+  
+  // Handle clue input change with validation
+  const handleClueChange = (value: string) => {
+    const error = validateClue(value);
+    setClueError(error);
+    
+    // Only update the clue if it's valid or empty (to allow deletion)
+    if (!error || value === '') {
+      onClueChange(value);
+    }
+  };
   
   // Find current turn player and determine if it's my turn
   const currentTurnPlayer = players.find(p => p.id === currentTurnPlayerId);
@@ -208,24 +231,34 @@ export default function TurnBasedClueGiving({
                 
                 {/* Show clue input inline for current player */}
                 {isCurrent && isMe && !hasSubmitted && (
-                  <form onSubmit={handleSubmit} className="flex-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={clue}
-                      onChange={(e) => onClueChange(e.target.value)}
-                      className="flex-1 px-3 py-1 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder="Enter your clue..."
-                      disabled={isSubmittingClue}
-                      autoFocus
-                    />
-                    <button
-                      type="submit"
-                      disabled={!clue.trim() || isSubmittingClue}
-                      className="px-4 py-1 bg-blue-600 text-white font-medium rounded hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors text-sm"
-                    >
-                      {isSubmittingClue ? '...' : 'Submit'}
-                    </button>
-                  </form>
+                  <div className="flex-1">
+                    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={clue}
+                        onChange={(e) => handleClueChange(e.target.value)}
+                        maxLength={24}
+                        className={`flex-1 px-3 py-1 bg-slate-700 border rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
+                          clueError ? 'border-red-500 focus:ring-red-500' : 'border-slate-600 focus:ring-blue-500'
+                        }`}
+                        placeholder="Enter your clue (single word)..."
+                        disabled={isSubmittingClue}
+                        autoFocus
+                      />
+                      <button
+                        type="submit"
+                        disabled={!clue.trim() || isSubmittingClue || !!clueError}
+                        className="px-4 py-1 bg-blue-600 text-white font-medium rounded hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors text-sm"
+                      >
+                        {isSubmittingClue ? '...' : 'Submit'}
+                      </button>
+                    </form>
+                    {clueError && (
+                      <div className="text-red-400 text-xs mt-1">
+                        {clueError}
+                      </div>
+                    )}
+                  </div>
                 )}
                 
                 {/* Show submitted clue */}

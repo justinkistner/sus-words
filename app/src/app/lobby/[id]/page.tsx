@@ -47,7 +47,11 @@ export default function Lobby() {
     if (typeof window !== 'undefined') {
       const playerId = localStorage.getItem('playerId');
       if (!playerId) {
-        router.push('/');
+        // Set a more user-friendly message for leaving players
+        setError('Redirecting you to the home page...');
+        setTimeout(() => {
+          router.push('/');
+        }, 1000);
       }
     }
   }, [router]);
