@@ -50,6 +50,46 @@ export default function TurnBasedClueGiving({
   const [timeRemaining, setTimeRemaining] = useState(60);
   const [showToast, setShowToast] = useState(false);
   
+  // Find current turn player and determine if it's my turn
+  const currentTurnPlayer = players.find(p => p.id === currentTurnPlayerId);
+  const isMyTurn = currentPlayerId === currentTurnPlayerId;
+  
+  // Timer effect
+  useEffect(() => {
+    if (!turnStartedAt || !isMyTurn || hasSubmittedClue) return;
+    
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - new Date(turnStartedAt).getTime()) / 1000);
+      const remaining = Math.max(0, 60 - elapsed);
+      setTimeRemaining(remaining);
+      
+      if (remaining === 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [turnStartedAt, isMyTurn, hasSubmittedClue]);
+  
+  // Debug clue data
+  useEffect(() => {
+    console.log('TurnBasedClueGiving - playerClues:', playerClues);
+  }, [playerClues]);
+
+  // Call onRevealComplete when component mounts if not already revealed
+  useEffect(() => {
+    if (!hasRevealedRole) {
+      onRevealComplete();
+    }
+  }, [hasRevealedRole, onRevealComplete]);
+  
+  // Show toast when clue is submitted
+  useEffect(() => {
+    if (hasSubmittedClue && isMyTurn) {
+      setShowToast(true);
+    }
+  }, [hasSubmittedClue, isMyTurn]);
+  
   // Early debug check
   if (!currentPlayerId) {
     console.error('TurnBasedClueGiving: No currentPlayerId provided!');
@@ -59,10 +99,6 @@ export default function TurnBasedClueGiving({
       </div>
     );
   }
-  
-  // Find current turn player
-  const currentTurnPlayer = players.find(p => p.id === currentTurnPlayerId);
-  const isMyTurn = currentPlayerId === currentTurnPlayerId;
   
   // Debug logging
   console.log('TurnBasedClueGiving Debug:', {
@@ -93,46 +129,10 @@ export default function TurnBasedClueGiving({
     return aIndex - bIndex;
   });
   
-  // Timer effect
-  useEffect(() => {
-    if (!turnStartedAt || !isMyTurn || hasSubmittedClue) return;
-    
-    const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - new Date(turnStartedAt).getTime()) / 1000);
-      const remaining = Math.max(0, 60 - elapsed);
-      setTimeRemaining(remaining);
-      
-      if (remaining === 0) {
-        clearInterval(interval);
-      }
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, [turnStartedAt, isMyTurn, hasSubmittedClue]);
-  
   // Sort clues by submission order
   const sortedClues = [...playerClues].sort((a, b) => 
     (a.submissionOrder || 0) - (b.submissionOrder || 0)
   );
-
-  // Debug clue data
-  useEffect(() => {
-    console.log('TurnBasedClueGiving - playerClues:', playerClues);
-  }, [playerClues]);
-
-  // Call onRevealComplete when component mounts if not already revealed
-  useEffect(() => {
-    if (!hasRevealedRole) {
-      onRevealComplete();
-    }
-  }, [hasRevealedRole, onRevealComplete]);
-  
-  // Show toast when clue is submitted
-  useEffect(() => {
-    if (hasSubmittedClue && isMyTurn) {
-      setShowToast(true);
-    }
-  }, [hasSubmittedClue, isMyTurn]);
   
   // Handle form submission with toast
   const handleSubmit = (e: React.FormEvent) => {
