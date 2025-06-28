@@ -1,18 +1,37 @@
 'use client';
 
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { GamePhase, Player } from '@/types/game';
 import { useGameRealtime } from '@/hooks/useGameRealtime';
-import { leaveGame, endGame, submitClue, submitVote, submitFakerGuess, startNextRound } from '@/lib/gameActions';
+import { leaveGame, endGame, submitClue, submitVote, submitFakerGuess, startNextRound, viewFinalScores } from '@/lib/gameActions';
 import { Confetti } from '@/components/Confetti';
-import RoleReveal from '@/components/RoleReveal';
+import ConnectionStatus from '@/components/ConnectionStatus';
+import { Toast } from '@/components/Toast';
+import { UnifiedRoleAssignment } from '@/components/UnifiedRoleAssignment';
+import { UnifiedWaitingForPlayers } from '@/components/UnifiedWaitingForPlayers';
+import { UnifiedTurnBasedClueGiving } from '@/components/UnifiedTurnBasedClueGiving';
+import { UnifiedVotingPhase } from '@/components/UnifiedVotingPhase';
+import { UnifiedResultsPhase } from '@/components/UnifiedResultsPhase';
+import { UnifiedFakerGuessPhase } from '@/components/UnifiedFakerGuessPhase';
 
 export default function Game() {
   const params = useParams();
   const roomId = params.id as string;
   const router = useRouter();
+  
+  // Debug player identity
+  useEffect(() => {
+    const storedPlayerId = localStorage.getItem('playerId');
+    const storedPlayerName = localStorage.getItem('playerName');
+    console.log('GamePage Player Identity Debug:', {
+      storedPlayerId,
+      storedPlayerName,
+      roomId,
+      timestamp: new Date().toISOString()
+    });
+  }, [roomId]);
   
   // Use the new hook for all game state and realtime subscriptions
   const {
@@ -24,11 +43,35 @@ export default function Game() {
     playerClues,
     playerVotes,
     fakerGuessResult,
+    currentTurnPlayerId,
+    turnStartedAt,
+    buttonHolderIndex,
+    playersReadyForClues,
+    allPlayersReady,
+    currentPlayerReady,
     isLoading,
     error,
     isConnected,
-    connectionError
+    connectionError,
+    refreshData,
+    submitClue,
+    submitVote,
+    refreshConnection
   } = useGameRealtime(roomId);
+  
+  // Debug current player recognition
+  useEffect(() => {
+    console.log('=== GAME PAGE DEBUG ===');
+    console.log('Current Player ID:', currentPlayerId);
+    console.log('Current Turn Player ID:', currentTurnPlayerId);
+    console.log('Is My Turn:', currentPlayerId === currentTurnPlayerId);
+    console.log('Players:', players.map(p => ({
+      id: p.id,
+      name: p.name,
+      isMe: p.id === currentPlayerId
+    })));
+    console.log('======================');
+  }, [currentPlayerId, currentTurnPlayerId, players]);
   
   // Local state for clue form
   const [clue, setClue] = useState<string>('');
@@ -42,18 +85,66 @@ export default function Game() {
   const [hasSubmittedVote, setHasSubmittedVote] = useState(false);
   const [hasRevealedRole, setHasRevealedRole] = useState(false);
   const [isSubmittingClue, setIsSubmittingClue] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
+  
+  // Role visibility logic: respect hasRevealedRole during wordReveal phase to prevent spoilers
+  const isRoleRevealed = hasRevealedRole || (room?.currentPhase && room.currentPhase !== 'roleAssignment' as GamePhase && room.currentPhase !== 'wordReveal' as GamePhase) || false;
+  
+  // Track previous round to detect round changes
+  const prevRoundRef = useRef<number | undefined>(undefined);
+  const prevPhaseRef = useRef<GamePhase | undefined>(undefined);
+  
+  // Auto-transition to clueGiving when all players are ready
+  useEffect(() => {
+    if (room?.currentPhase === 'wordReveal' && allPlayersReady && players.length > 0) {
+      console.log('🚀 All players ready! Auto-transitioning to clueGiving phase...');
+      
+      const transitionToClueGiving = async () => {
+        try {
+          const supabase = createClient();
+          const { error } = await supabase
+            .from('rooms')
+            .update({ current_phase: 'clueGiving' })
+            .eq('id', roomId);
+            
+          if (error) {
+            console.error('Error transitioning to clueGiving:', error);
+          } else {
+            console.log('Successfully transitioned to clueGiving phase');
+          }
+        } catch (error) {
+          console.error('Error in auto-transition:', error);
+        }
+      };
+      
+      // Small delay to let users see "All players ready!" message
+      setTimeout(transitionToClueGiving, 1500);
+    }
+  }, [room?.currentPhase, allPlayersReady, players.length, roomId]);
 
   // Reset local state when round changes
   useEffect(() => {
-    if (room?.currentPhase === 'clueGiving') {
-      // Reset clue-related state for new round
+    // Reset hasRevealedRole whenever we start a new round, regardless of phase
+    if (prevRoundRef.current !== undefined && prevRoundRef.current !== room?.currentRound) {
+      console.log('🔄 NEW ROUND DETECTED - Resetting hasRevealedRole to false');
+      setHasRevealedRole(false);
+    }
+    
+    // Only reset when we transition TO clueGiving from another phase
+    if (room?.currentPhase === 'clueGiving' && prevPhaseRef.current !== 'clueGiving') {
+      
+      // Reset clue-related state for new phase
       setClue('');
       setSubmittedClue(false);
       setSelectedVote(null);
       setFakerGuess('');
       setHasSubmittedVote(false);
-      setHasRevealedRole(false);
     }
+    
+    prevRoundRef.current = room?.currentRound;
+    prevPhaseRef.current = room?.currentPhase;
   }, [room?.currentRound, room?.currentPhase]);
 
   const handleLeaveGame = async () => {
@@ -66,7 +157,9 @@ export default function Game() {
     if (result.success) {
       router.push('/');
     } else {
-      alert(result.error || 'Failed to leave game');
+      setToastMessage(result.error || 'Failed to leave game');
+      setToastType('error');
+      setShowToast(true);
       setIsLeaving(false);
     }
   };
@@ -83,9 +176,13 @@ export default function Game() {
     const result = await endGame(roomId, playerId);
     
     if (result.success) {
-      alert('Game ended!');
+      setToastMessage('Game ended!');
+      setToastType('success');
+      setShowToast(true);
     } else {
-      alert(result.error || 'Failed to end game');
+      setToastMessage(result.error || 'Failed to end game');
+      setToastType('error');
+      setShowToast(true);
       setIsEndingGame(false);
     }
   };
@@ -100,19 +197,31 @@ export default function Game() {
       return;
     }
     
+    console.log('Vote submission debug:', {
+      voterId: playerId,
+      votedForId: selectedVote,
+      roundNumber: room?.currentRound || 1,
+      availablePlayers: players.map(p => ({ id: p.id, name: p.name })),
+      playerClues: playerClues.map(pc => ({ playerId: pc.playerId, playerName: pc.playerName }))
+    });
+    
     try {
-      const result = await submitVote(roomId, playerId, selectedVote, room?.currentRound || 1);
+      const result = await submitVote(selectedVote);
       
       if (result.success) {
         setHasSubmittedVote(true);
       } else {
-        alert(`Error: ${result.error}`);
+        setToastMessage(`Error: ${result.error}`);
+        setToastType('error');
+        setShowToast(true);
         // Reset state on error so user can try again
         setSelectedVote(null);
       }
     } catch (error) {
       console.error('Vote submission error:', error);
-      alert('Failed to submit vote. Please try again.');
+      setToastMessage('Failed to submit vote. Please try again.');
+      setToastType('error');
+      setShowToast(true);
       // Reset state on error so user can try again
       setSelectedVote(null);
     } finally {
@@ -132,16 +241,53 @@ export default function Game() {
     }
     
     try {
-      const result = await submitClue(roomId, playerId, clue, room?.currentRound || 1);
+      console.log('Submitting clue:', { clue });
+      const result = await submitClue(clue);
       
       if (result.success) {
         setSubmittedClue(true);
       } else {
-        alert(`Error: ${result.error}`);
+        setToastMessage(`Error: ${result.error}`);
+        setToastType('error');
+        setShowToast(true);
       }
     } catch (error) {
       console.error('Clue submission error:', error);
-      alert('Failed to submit clue. Please try again.');
+      setToastMessage('Failed to submit clue. Please try again.');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setIsSubmittingClue(false);
+    }
+  };
+
+  const handleClueSubmitUnified = async (clueText: string) => {
+    if (!clueText.trim() || isSubmittingClue || submittedClue) return;
+    
+    setIsSubmittingClue(true);
+    const playerId = localStorage.getItem('playerId');
+    if (!playerId) {
+      setIsSubmittingClue(false);
+      return;
+    }
+    
+    try {
+      console.log('Submitting clue:', { clue: clueText });
+      const result = await submitClue(clueText);
+      
+      if (result.success) {
+        setSubmittedClue(true);
+        setClue(''); // Clear the input after successful submission
+      } else {
+        setToastMessage(`Error: ${result.error}`);
+        setToastType('error');
+        setShowToast(true);
+      }
+    } catch (error) {
+      console.error('Clue submission error:', error);
+      setToastMessage('Failed to submit clue. Please try again.');
+      setToastType('error');
+      setShowToast(true);
     } finally {
       setIsSubmittingClue(false);
     }
@@ -155,6 +301,19 @@ export default function Game() {
 
   // Check if current player has already voted
   const hasVoted = playerVotes.some(v => v.voterId === currentPlayerId) || hasSubmittedVote;
+
+  const playerRoles = players.reduce((acc, player) => {
+    acc[player.id] = player.role === 'faker' ? 'faker' : 'player';
+    return acc;
+  }, {} as Record<string, 'player' | 'faker'>);
+
+  if (!currentPlayerId && !error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 md:p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
+        <div className="text-xl sm:text-2xl font-bold mb-4">Establishing player identity...</div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -182,29 +341,35 @@ export default function Game() {
   }
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 md:p-8 bg-gradient-to-b from-slate-800 to-slate-900 text-white">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-slate-800 text-white p-4">
+      {/* Toast Notification */}
+      {showToast && (
+        <Toast
+          message={toastMessage}
+          type={toastType}
+          onClose={() => setShowToast(false)}
+        />
+      )}
+      
+      <div className="max-w-6xl mx-auto space-y-6">
         {/* Connection status */}
-        {connectionError && (
-          <div className="mb-4 p-4 bg-red-500/20 border border-red-500 rounded-lg">
-            <p className="text-red-300">{connectionError}</p>
-          </div>
-        )}
+        <ConnectionStatus isConnected={isConnected} connectionError={connectionError} onRetry={refreshConnection} />
         
-        {!isConnected && !connectionError && (
-          <div className="mb-4 p-4 bg-yellow-500/20 border border-yellow-500 rounded-lg">
-            <p className="text-yellow-300">Connecting to game...</p>
-          </div>
-        )}
-
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2 sm:gap-0">
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">{room?.name || 'Loading...'}</h1>
           </div>
           
-          {/* Center - Next Round Button (Results Phase Only) */}
-          <div className="flex-1 flex justify-start sm:justify-center items-center mt-2 sm:mt-0">
+          <div className="text-right">
+            {/* Show round counter only when not in results phase */}
+            {room?.currentPhase !== 'results' && (
+              <p className="text-sm text-gray-400">
+                Round {room?.currentRound || 0} of {room?.totalRounds || 3}
+              </p>
+            )}
+            
+            {/* Next Round Button (Results Phase Only) */}
             {room?.currentPhase === 'results' && isHost && (
               <>
                 {room?.currentRound < room?.totalRounds ? (
@@ -226,7 +391,9 @@ export default function Game() {
                         
                         if (!result.success) {
                           console.error('Failed to start next round:', result.error);
-                          alert(`Failed to start next round: ${result.error || 'Unknown error'}`);
+                          setToastMessage(`Failed to start next round: ${result.error || 'Unknown error'}`);
+                          setToastType('error');
+                          setShowToast(true);
                           setIsStartingNextRound(false);
                         } else {
                           // Reset local state for new round
@@ -239,25 +406,32 @@ export default function Game() {
                         }
                       } catch (error) {
                         console.error('Error starting next round:', error);
-                        alert(`Error starting next round: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                        setToastMessage(`Error starting next round: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                        setToastType('error');
+                        setShowToast(true);
                         setIsStartingNextRound(false);
                       }
                     }}
                     disabled={isStartingNextRound}
-                    className="px-4 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded text-xs font-medium transition-colors"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded font-medium transition-colors"
                   >
                     {isStartingNextRound ? 'Starting...' : 'Next Round'}
                   </button>
                 ) : (
                   <button
                     onClick={async () => {
-                      const supabase = createClient();
-                      await supabase
-                        .from('rooms')
-                        .update({ current_phase: 'finished' })
-                        .eq('id', roomId);
+                      const result = await viewFinalScores(roomId);
+                      if (result.success) {
+                        setToastMessage('Final scores viewed!');
+                        setToastType('success');
+                        setShowToast(true);
+                      } else {
+                        setToastMessage(`Error: ${result.error}`);
+                        setToastType('error');
+                        setShowToast(true);
+                      }
                     }}
-                    className="px-4 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors"
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
                   >
                     View Final Score
                   </button>
@@ -265,345 +439,220 @@ export default function Game() {
               </>
             )}
           </div>
-          
-          <div className="text-right">
-            <p className="text-sm text-gray-400">
-              Round {room?.currentRound || 0} of {room?.totalRounds || 3}
-            </p>
-          </div>
         </div>
 
         {/* Player Role Info / Voting / Results - Unified Container */}
-        {(room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting' || room?.currentPhase === 'results' || room?.currentPhase === 'fakerGuess' || room?.currentPhase === 'finished') && currentPlayerId && (
+        {(room?.currentPhase === 'wordReveal' || room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting' || room?.currentPhase === 'results' || room?.currentPhase === 'fakerGuess' || room?.currentPhase === 'finished') && currentPlayerId && (
           <div className="mb-8 p-6 bg-slate-700 rounded-lg transition-all duration-300 ease-in-out" style={{ minHeight: room?.currentPhase === 'voting' || room?.currentPhase === 'results' || room?.currentPhase === 'fakerGuess' || room?.currentPhase === 'finished' ? 'auto' : '180px' }}>
+            {/* Word Reveal / Role Assignment Phase */}
+            {room?.currentPhase === 'wordReveal' && (
+              <>
+                {!currentPlayerReady ? (
+                  // Show role assignment if current player hasn't clicked Ready yet
+                  <>
+                    {console.log('🎮 RENDERING UnifiedRoleAssignment:', {
+                      currentPhase: room?.currentPhase,
+                      currentPlayerId,
+                      isFaker,
+                      hasRevealedRole: isRoleRevealed,
+                      currentPlayerRole: isFaker ? 'faker' : 'player'
+                    })}
+                    <UnifiedRoleAssignment
+                      currentPlayerId={currentPlayerId}
+                      players={players}
+                      turnOrder={[]}
+                      buttonHolderIndex={buttonHolderIndex ?? 0}
+                      currentPlayerRole={isFaker ? 'faker' : 'player'}
+                      hasRevealedRole={isRoleRevealed}
+                      roomId={roomId}
+                      onRevealRole={() => {
+                        console.log('🎯 ROLE REVEALED - Setting hasRevealedRole to true');
+                        setHasRevealedRole(true);
+                      }}
+                    />
+                  </>
+                ) : (
+                  // Show waiting UI if current player is ready but others aren't
+                  <>
+                    {console.log('🕐 RENDERING UnifiedWaitingForPlayers:', {
+                      currentPhase: room?.currentPhase,
+                      currentPlayerId,
+                      currentPlayerReady,
+                      allPlayersReady,
+                      playersReadyForClues
+                    })}
+                    <UnifiedWaitingForPlayers
+                      players={players}
+                      currentPlayerId={currentPlayerId}
+                      currentPlayerRole={isFaker ? 'faker' : 'player'}
+                      playersReadyForClues={playersReadyForClues}
+                      turnOrder={[]}
+                      buttonHolderIndex={buttonHolderIndex ?? 0}
+                    />
+                  </>
+                )}
+              </>
+            )}
+
             {/* Clue Giving Phase */}
             {room?.currentPhase === 'clueGiving' && (
-              <div className="animate-fadeIn">
-                <RoleReveal 
-                  isFaker={isFaker} 
-                  secretWord={secretWord || undefined}
-                  onRevealComplete={() => setHasRevealedRole(true)}
-                  clue={clue}
-                  onClueChange={setClue}
-                  onClueSubmit={handleClueSubmit}
-                  hasSubmittedClue={submittedClue}
-                  isSubmittingClue={isSubmittingClue}
-                />
-              </div>
+              <UnifiedTurnBasedClueGiving
+                currentPlayerId={currentPlayerId}
+                isFaker={isFaker}
+                secretWord={secretWord || undefined}
+                currentTurnPlayerId={currentTurnPlayerId || ''}
+                turnStartedAt={typeof turnStartedAt === 'string' ? parseInt(turnStartedAt) : turnStartedAt || Date.now()}
+                buttonHolderIndex={buttonHolderIndex ?? 0}
+                players={players}
+                playerClues={playerClues}
+                clue={clue}
+                onClueChange={setClue}
+                onClueSubmit={handleClueSubmitUnified}
+                hasSubmittedClue={submittedClue}
+                isSubmittingClue={isSubmittingClue}
+                hasRevealedRole={isRoleRevealed}
+                onRevealRole={() => setHasRevealedRole(true)}
+                currentPlayerRole={isFaker ? 'faker' : 'player'}
+              />
             )}
 
             {/* Voting Phase */}
             {room?.currentPhase === 'voting' && (
-              <div className="animate-fadeIn">
-                <h3 className="text-xl font-semibold mb-4">All Clues:</h3>
-                <div className="space-y-3">
-                  {playerClues.map((pc) => {
-                    const isCurrentPlayer = pc.playerId === currentPlayerId;
-                    const hasVotedForThis = selectedVote === pc.playerId;
-                    const hasSubmittedVoteForThis = hasSubmittedVote && selectedVote === pc.playerId;
-                    // Check if this player has submitted a vote (not received votes)
-                    const playerHasSubmittedVote = playerVotes.some(v => v.voterId === pc.playerId);
-                    
-                    return (
-                      <div key={pc.playerId} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 p-3 bg-slate-600 rounded-lg">
-                        {/* Voting Status Icon */}
-                        <div className="flex-shrink-0">
-                          {playerHasSubmittedVote ? (
-                            <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                              <span className="text-white text-sm">✓</span>
-                            </div>
-                          ) : (
-                            <div className="w-6 h-6 bg-gray-500 rounded-full flex items-center justify-center">
-                              <span className="text-gray-300 text-sm">○</span>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Player Name and Clue */}
-                        <div className="flex-1">
-                          <span className="font-medium">{pc.playerName}: </span>
-                          <span className="text-blue-400">{pc.clue}</span>
-                        </div>
-                        
-                        {/* Vote Button */}
-                        {!isCurrentPlayer ? (
-                          <div className="flex-shrink-0 w-full sm:w-auto">
-                            {!hasSubmittedVote ? (
-                              hasVotedForThis ? (
-                                <button
-                                  onClick={() => setSelectedVote(null)}
-                                  className="w-full sm:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-all transform hover:scale-105"
-                                >
-                                  Cancel
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => setSelectedVote(pc.playerId)}
-                                  disabled={selectedVote !== null && selectedVote !== pc.playerId}
-                                  className="w-full sm:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-all transform hover:scale-105"
-                                >
-                                  Vote
-                                </button>
-                              )
-                            ) : (
-                              hasSubmittedVoteForThis ? (
-                                <div className="w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-lg font-medium flex items-center justify-center gap-2">
-                                  <span>✓</span>
-                                  <span>Voted</span>
-                                </div>
-                              ) : (
-                                <div className="w-full sm:w-auto px-4 py-2 bg-gray-600 text-gray-400 rounded-lg font-medium text-center">
-                                  Not Voted
-                                </div>
-                              )
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex-shrink-0 w-full sm:w-auto px-4 py-2 bg-gray-600 text-gray-400 rounded-lg font-medium text-center">
-                            You
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                {/* Submit Vote Button */}
-                {selectedVote && !hasSubmittedVote && (
-                  <div className="mt-6 flex justify-center">
-                    <button
-                      onClick={handleVoteSubmit}
-                      disabled={isSubmittingVote}
-                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-                    >
-                      {isSubmittingVote ? 'Submitting...' : 'Submit Vote'}
-                    </button>
-                  </div>
-                )}
-              </div>
+              <UnifiedVotingPhase
+                currentPlayerId={currentPlayerId}
+                playerClues={playerClues}
+                playerVotes={playerVotes}
+                selectedVote={selectedVote}
+                onVoteChange={setSelectedVote}
+                onVoteSubmit={handleVoteSubmit}
+                hasSubmittedVote={hasSubmittedVote}
+                isSubmittingVote={isSubmittingVote}
+                currentPlayerRole={isFaker ? 'faker' : 'player'}
+                hasRevealedRole={isRoleRevealed}
+              />
             )}
 
             {/* Faker Guess Phase */}
             {room?.currentPhase === 'fakerGuess' && (
-              <div className="space-y-6">
-                <div className="bg-slate-700 rounded-lg p-6 text-center">
-                  <h3 className="text-2xl font-bold mb-2">
-                    {isFaker ? "You've been caught! Try to guess the secret word:" : "The faker was caught!"}
-                  </h3>
-                  
-                  {isFaker ? (
-                    <div className="space-y-4">
-                      {/* Selected word display */}
-                      {fakerGuess && (
-                        <div className="mb-4 p-4 bg-slate-600 rounded-lg">
-                          <p className="text-sm text-gray-300 mb-2">Your guess:</p>
-                          <p className="text-xl font-bold text-blue-400">{fakerGuess}</p>
-                        </div>
-                      )}
-                      
-                      {/* Word Grid as buttons */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 mb-6">
-                        {(Array.isArray(room?.wordGrid) ? room?.wordGrid : []).flat().map((word: string, index: number) => (
-                          <button
-                            key={index}
-                            onClick={() => setFakerGuess(word)}
-                            disabled={isSubmittingVote}
-                            className={`p-3 rounded-lg font-medium transition-all ${
-                              fakerGuess === word
-                                ? 'bg-blue-600 text-white ring-2 ring-blue-400'
-                                : 'bg-slate-600 hover:bg-slate-500 text-white'
-                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          >
-                            {word}
-                          </button>
-                        ))}
-                      </div>
-                      
-                      {/* Confirm button */}
-                      <button
-                        onClick={async () => {
-                          if (!fakerGuess) return;
-                          
-                          setIsSubmittingVote(true);
-                          const playerId = localStorage.getItem('playerId');
-                          if (!playerId) return;
-                          
-                          const result = await submitFakerGuess(roomId, playerId, fakerGuess, room?.currentRound || 1);
-                          
-                          if (!result.success) {
-                            alert(`Error: ${result.error}`);
-                          }
-                          setIsSubmittingVote(false);
-                        }}
-                        disabled={!fakerGuess || isSubmittingVote}
-                        className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-                      >
-                        {isSubmittingVote ? 'Submitting...' : 'Confirm Guess'}
-                      </button>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-base text-gray-300">
-                        {players.find(p => p.role === 'faker')?.name || 'The faker'} is now guessing the secret word...
-                      </p>
-                      <div className="animate-pulse mt-4">
-                        <div className="h-2 bg-slate-600 rounded w-32 mx-auto"></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <UnifiedFakerGuessPhase
+                currentPlayerId={currentPlayerId}
+                players={players}
+                isFaker={isFaker}
+                wordGrid={room?.wordGrid || []}
+                secretWord={secretWord || undefined}
+                playerClues={playerClues.reduce((acc, pc) => {
+                  acc[pc.playerId] = pc.clue;
+                  return acc;
+                }, {} as Record<string, string>)}
+                onGuessSubmit={async (guess) => {
+                  try {
+                    if (!currentPlayerId || !room?.currentRound) {
+                      setToastMessage('Missing player or round information');
+                      setToastType('error');
+                      setShowToast(true);
+                      return;
+                    }
+                    const result = await submitFakerGuess(roomId, currentPlayerId, guess, room.currentRound);
+                    if (!result.success) {
+                      setToastMessage(`Error: ${result.error}`);
+                      setToastType('error');
+                      setShowToast(true);
+                    }
+                  } catch (error) {
+                    console.error('Error submitting faker guess:', error);
+                    setToastMessage('Failed to submit guess');
+                    setToastType('error');
+                    setShowToast(true);
+                  }
+                }}
+                isSubmittingGuess={false}
+                hasSubmittedGuess={false}
+                currentPlayerRole={isFaker ? 'faker' : 'player'}
+              />
             )}
 
             {/* Results Phase */}
             {room?.currentPhase === 'results' && (
-              <div className="animate-fadeIn space-y-6">
-                {/* Result Summary */}
-                <div className="text-center">
-                  {(() => {
-                    // Calculate who got the most votes
-                    const voteCount: Record<string, number> = {};
-                    players.forEach(p => voteCount[p.id] = 0);
-                    playerVotes.forEach(v => {
-                      voteCount[v.votedForId] = (voteCount[v.votedForId] || 0) + 1;
-                    });
+              <UnifiedResultsPhase
+                currentPlayerId={currentPlayerId}
+                players={players}
+                playerClues={playerClues}
+                playerVotes={playerVotes}
+                playerRoles={playerRoles}
+                hasSubmittedVote={hasSubmittedVote}
+                isSubmittingVote={isSubmittingVote}
+                isHost={isHost}
+                currentRound={room?.currentRound}
+                totalRounds={room?.totalRounds}
+                onProceedToFakerGuess={async () => {
+                  try {
+                    const supabase = createClient();
+                    const { error } = await supabase
+                      .from('rooms')
+                      .update({ current_phase: 'fakerGuess' })
+                      .eq('id', roomId);
                     
-                    const fakerId = players.find(p => p.role === 'faker')?.id;
-                    const fakerName = players.find(p => p.role === 'faker')?.name || 'Unknown';
-                    const maxVotes = Math.max(...Object.values(voteCount));
-                    const mostVotedId = Object.entries(voteCount).find(([_, count]) => count === maxVotes)?.[0];
-                    const mostVotedName = players.find(p => p.id === mostVotedId)?.name || 'Unknown';
-                    
-                    const fakerCaught = mostVotedId === fakerId;
-                    
-                    if (fakerCaught) {
-                      if (fakerGuessResult?.isCorrect === true) {
-                        return (
-                          <>
-                            <h3 className="text-2xl font-bold text-yellow-400 mb-2">The Faker Escaped!</h3>
-                            <p className="text-lg text-gray-300">
-                              {fakerName} was caught, but guessed the secret word correctly!
-                            </p>
-                          </>
-                        );
-                      } else {
-                        return (
-                          <>
-                            <h3 className="text-2xl font-bold text-green-400 mb-2">The Faker Was Caught!</h3>
-                            <p className="text-lg text-gray-300">
-                              Majority voted for {fakerName} and they failed to guess the secret word.
-                            </p>
-                          </>
-                        );
-                      }
-                    } else {
-                      return (
-                        <>
-                          <h3 className="text-2xl font-bold text-red-400 mb-2">The Faker Escaped!</h3>
-                          <p className="text-lg text-gray-300">
-                            Majority voted for {mostVotedName}, but {fakerName} was the faker.
-                          </p>
-                        </>
-                      );
+                    if (error) {
+                      setToastMessage(`Error: ${error.message}`);
+                      setToastType('error');
+                      setShowToast(true);
                     }
-                  })()}
-                </div>
-
-                {/* Voting Results */}
-                <div>
-                  <div className="space-y-4">
-                    {(() => {
-                      // Calculate who got the most votes for scoring logic
-                      const voteCount: Record<string, number> = {};
-                      players.forEach(p => voteCount[p.id] = 0);
-                      playerVotes.forEach(v => {
-                        voteCount[v.votedForId] = (voteCount[v.votedForId] || 0) + 1;
-                      });
-                      
-                      const fakerId = players.find(p => p.role === 'faker')?.id;
-                      const maxVotes = Math.max(...Object.values(voteCount));
-                      const mostVotedId = Object.entries(voteCount).find(([_, count]) => count === maxVotes)?.[0];
-                      const fakerWonVote = mostVotedId === fakerId;
-                      
-                      return players.map((player) => {
-                        const votesForPlayer = playerVotes.filter(v => v.votedForId === player.id);
-                        const voterNames = votesForPlayer.map(v => 
-                          players.find(p => p.id === v.voterId)?.name || 'Unknown'
-                        );
-                        
-                        // Calculate points for this player
-                        let points = 0;
-                        let reason = '';
-                        
-                        if (player.role === 'faker') {
-                          if (fakerWonVote) {
-                            // Check if faker guessed correctly
-                            if (fakerGuessResult?.isCorrect === true) {
-                              points = 1;
-                              reason = 'Guessed the secret word correctly';
-                            } else {
-                              points = 0;
-                              reason = 'Failed to guess the secret word';
-                            }
-                          } else {
-                            points = 2;
-                            reason = 'Majority voted for wrong person';
-                          }
-                        } else {
-                          // Regular players
-                          if (fakerWonVote) {
-                            // Check if this player voted for the faker
-                            const votedForFaker = playerVotes.find(v => v.voterId === player.id)?.votedForId === fakerId;
-                            if (votedForFaker) {
-                              // Only give points if faker failed to guess word
-                              if (fakerGuessResult?.isCorrect === false) {
-                                points = 2;
-                                reason = 'Correctly identified faker';
-                              } else {
-                                points = 0;
-                                reason = 'Faker guessed the word';
-                              }
-                            }
-                          }
-                        }
-                        
-                        return (
-                          <div key={player.id} className="p-3 bg-slate-600 rounded-lg">
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="flex items-center gap-3">
-                                <span className="font-medium">{player.name}</span>
-                                {player.role === 'faker' && (
-                                  <span className="px-2 py-1 bg-red-600 text-white text-xs rounded">FAKER</span>
-                                )}
-                              </div>
-                              <div className="text-sm">
-                                {votesForPlayer.length > 0 ? (
-                                  <span>Votes: {voterNames.join(', ')}</span>
-                                ) : (
-                                  <span className="text-gray-400">No votes</span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={`font-medium ${points > 0 ? 'text-green-400' : 'text-gray-400'}`}>
-                                +{points} pts
-                              </span>
-                              {reason && (
-                                <span className="text-xs text-gray-500">({reason})</span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                </div>
-              </div>
+                  } catch (error) {
+                    console.error('Error transitioning to faker guess:', error);
+                    setToastMessage('Failed to proceed to faker guess phase');
+                    setToastType('error');
+                    setShowToast(true);
+                  }
+                }}
+                onProceedToNextRound={async () => {
+                  setIsStartingNextRound(true);
+                  try {
+                    const result = await startNextRound(roomId);
+                    
+                    if (!result.success) {
+                      console.error('Failed to start next round:', result.error);
+                      setToastMessage(`Failed to start next round: ${result.error || 'Unknown error'}`);
+                      setToastType('error');
+                      setShowToast(true);
+                      setIsStartingNextRound(false);
+                    } else {
+                      // Reset local state for new round
+                      setClue('');
+                      setSubmittedClue(false);
+                      setSelectedVote(null);
+                      setFakerGuess('');
+                      setHasSubmittedVote(false);
+                      setIsStartingNextRound(false);
+                    }
+                  } catch (error) {
+                    console.error('Error starting next round:', error);
+                    setToastMessage(`Error starting next round: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    setToastType('error');
+                    setShowToast(true);
+                    setIsStartingNextRound(false);
+                  }
+                }}
+                onViewFinalScores={async () => {
+                  try {
+                    const result = await viewFinalScores(roomId);
+                    if (!result.success) {
+                      setToastMessage(`Error: ${result.error}`);
+                      setToastType('error');
+                      setShowToast(true);
+                    }
+                  } catch (error) {
+                    console.error('Error viewing final scores:', error);
+                    setToastMessage('Failed to view final scores');
+                    setToastType('error');
+                    setShowToast(true);
+                  }
+                }}
+              />
             )}
 
             {/* Finished Phase - Game Over */}
             {room?.currentPhase === 'finished' && (
-              <div className="animate-fadeIn space-y-6">
+              <div className="space-y-6">
                 <Confetti />
                 <div className="text-center">
                   <h2 className="text-4xl font-bold mb-2 text-yellow-400">🎉 Game Over! 🎉</h2>
@@ -668,7 +717,7 @@ export default function Game() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-4">
               {(room?.wordGrid || []).map((word, index) => {
                 const isSecretWord = (
-                  (!isFaker && (room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting') && secretWord && word === secretWord && hasRevealedRole) ||
+                  (!isFaker && (room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting') && secretWord && word === secretWord && isRoleRevealed) ||
                   (room?.currentPhase === 'results' && secretWord && word === secretWord)
                 );
                 return (
@@ -689,7 +738,7 @@ export default function Game() {
         )}
         
         {/* Players List */}
-        {room?.currentPhase !== 'finished' && (
+        {room?.currentPhase !== 'finished' && room?.currentPhase !== 'results' && (
           <div className="mb-8">
             <h3 className="text-xl font-bold mb-4">Players ({players.length})</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">

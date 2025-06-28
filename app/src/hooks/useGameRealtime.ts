@@ -11,9 +11,19 @@ interface UseGameRealtimeReturn {
   currentPlayerId: string | null;
   isFaker: boolean;
   secretWord: string | null;
-  playerClues: { playerId: string; playerName: string; clue: string }[];
+  playerClues: { playerId: string; playerName: string; clue: string; submissionOrder?: number }[];
   playerVotes: { voterId: string; votedForId: string }[];
   fakerGuessResult: { guess: string | null; isCorrect: boolean } | null;
+  
+  // Turn-based state
+  currentTurnPlayerId: string | null;
+  turnStartedAt: string | null;
+  buttonHolderIndex: number | null;
+  
+  // Ready state
+  playersReadyForClues: { playerId: string; playerName: string; isReady: boolean }[];
+  allPlayersReady: boolean;
+  currentPlayerReady: boolean;
   
   // Loading and error states
   isLoading: boolean;
@@ -25,6 +35,7 @@ interface UseGameRealtimeReturn {
   refreshData: () => Promise<void>;
   submitClue: (clueText: string) => Promise<{ success: boolean; error?: string }>;
   submitVote: (votedForId: string) => Promise<{ success: boolean; error?: string }>;
+  refreshConnection: () => void;
 }
 
 // Helper function to normalize room data from database (snake_case) to our types (camelCase)
@@ -43,6 +54,9 @@ const normalizeRoomData = (roomData: any): GameRoom => {
     timePerClue: roomData.time_per_clue,
     timePerVote: roomData.time_per_vote,
     gameMode: roomData.game_mode || 'classic',
+    currentTurnPlayerId: roomData.current_turn_player_id,
+    turnStartedAt: roomData.turn_started_at,
+    buttonHolderIndex: roomData.button_holder_index,
     players: []
   };
 };
@@ -52,6 +66,18 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const [subscriptionTrigger, setSubscriptionTrigger] = useState(0); // Add trigger to force re-subscription
+  
+  // Check initial player ID on mount
+  useEffect(() => {
+    const storedId = localStorage.getItem('playerId');
+    const storedName = localStorage.getItem('playerName');
+    console.log('useGameRealtime MOUNT - Initial player data:', {
+      playerId: storedId,
+      playerName: storedName,
+      roomId
+    });
+  }, []);
   
   // Data state
   const [room, setRoom] = useState<GameRoom | null>(null);
@@ -59,15 +85,23 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [isFaker, setIsFaker] = useState(false);
   const [secretWord, setSecretWord] = useState<string | null>(null);
-  const [playerClues, setPlayerClues] = useState<{ playerId: string; playerName: string; clue: string }[]>([]);
+  const [playerClues, setPlayerClues] = useState<{ playerId: string; playerName: string; clue: string; submissionOrder?: number }[]>([]);
   const [playerVotes, setPlayerVotes] = useState<{ voterId: string; votedForId: string }[]>([]);
   const [fakerGuessResult, setFakerGuessResult] = useState<{ guess: string | null; isCorrect: boolean } | null>(null);
+  const [currentTurnPlayerId, setCurrentTurnPlayerId] = useState<string | null>(null);
+  const [turnStartedAt, setTurnStartedAt] = useState<string | null>(null);
+  const [buttonHolderIndex, setButtonHolderIndex] = useState<number | null>(null);
   
   // Loading and error states
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  
+  // Debug when currentPlayerId changes
+  useEffect(() => {
+    console.log('useGameRealtime: currentPlayerId state changed to:', currentPlayerId);
+  }, [currentPlayerId]);
   
   // Fetch room data
   const fetchRoomData = useCallback(async () => {
@@ -82,6 +116,9 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
       
       const normalizedRoom = normalizeRoomData(roomData);
       setRoom(normalizedRoom);
+      setCurrentTurnPlayerId(normalizedRoom.currentTurnPlayerId ?? null);
+      setTurnStartedAt(normalizedRoom.turnStartedAt ?? null);
+      setButtonHolderIndex(normalizedRoom.buttonHolderIndex ?? null);
       
       // Only fetch round data if we're in an active game phase
       if (normalizedRoom.currentPhase !== 'waiting' && normalizedRoom.currentRound > 0) {
@@ -140,6 +177,7 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
           player_id,
           is_host,
           is_ready,
+          is_ready_for_clues,
           score,
           role,
           players (
@@ -158,15 +196,39 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
           role: (rp.role || 'regular') as PlayerRole,
           score: (rp.score as number) || 0,
           isReady: (rp.is_ready as boolean) || false,
-          isHost: (rp.is_host as boolean) || false
+          isHost: (rp.is_host as boolean) || false,
+          isReadyForClues: (rp.is_ready_for_clues as boolean) || false
         }));
         
         setPlayers(formattedPlayers);
         
         // Set current player ID
         const currentId = localStorage.getItem('playerId');
-        if (currentId) {
+        const storedPlayerName = localStorage.getItem('playerName');
+        
+        console.log('useGameRealtime Player ID Debug:', {
+          currentIdFromStorage: currentId,
+          storedPlayerName,
+          playersInRoom: formattedPlayers.map(p => ({ id: p.id, name: p.name })),
+          matchFound: formattedPlayers.some(p => p.id === currentId),
+          timestamp: new Date().toISOString()
+        });
+        
+        if (currentId && formattedPlayers.some(p => p.id === currentId)) {
+          // Player ID exists and matches a player in the room
           setCurrentPlayerId(currentId);
+        } else if (storedPlayerName) {
+          // Try to reconnect by player name
+          const matchingPlayer = formattedPlayers.find(p => p.name === storedPlayerName);
+          if (matchingPlayer) {
+            console.log('Reconnecting player by name:', storedPlayerName, 'with ID:', matchingPlayer.id);
+            localStorage.setItem('playerId', matchingPlayer.id);
+            setCurrentPlayerId(matchingPlayer.id);
+          } else {
+            console.error('Could not find player with name:', storedPlayerName);
+          }
+        } else {
+          console.error('No player ID or name found in localStorage!');
         }
       }
     } catch (err: any) {
@@ -177,7 +239,7 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
   
   // Fetch clues for current round
   const fetchCluesData = useCallback(async () => {
-    if (!room || room.currentPhase !== 'clueGiving' && room.currentPhase !== 'voting' && room.currentPhase !== 'results') return;
+    if (!room || room.currentPhase !== 'clueGiving' && room.currentPhase !== 'voting' && room.currentPhase !== 'results' && room.currentPhase !== 'fakerGuess') return;
     
     try {
       const { data: clues, error } = await supabase
@@ -185,6 +247,7 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
         .select(`
           clue_text,
           player_id,
+          submission_order,
           players (
             name
           )
@@ -194,12 +257,16 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
         
       if (error) throw error;
       
+      console.log('Raw clues data from database:', clues);
+      
       if (clues) {
         const formattedClues = clues.map((c: any) => ({
           playerId: c.player_id,
           playerName: c.players.name,
-          clue: c.clue_text
+          clue: c.clue_text,
+          submissionOrder: c.submission_order
         }));
+        console.log('Formatted clues:', formattedClues);
         setPlayerClues(formattedClues);
       }
     } catch (err: any) {
@@ -319,6 +386,9 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
         console.log('🎮 Room update received:', payload);
         const normalizedRoom = normalizeRoomData(payload.new);
         setRoom(normalizedRoom);
+        setCurrentTurnPlayerId(normalizedRoom.currentTurnPlayerId ?? null);
+        setTurnStartedAt(normalizedRoom.turnStartedAt ?? null);
+        setButtonHolderIndex(normalizedRoom.buttonHolderIndex ?? null);
         
         // Check if round changed
         const oldRound = room?.currentRound || 0;
@@ -437,11 +507,11 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
       setIsConnected(false);
       setConnectionError(null);
     };
-  }, [roomId]); // Only depend on stable values
+  }, [roomId, subscriptionTrigger]); // Only depend on stable values
   
   // Separate effect for clue fetching when phase changes
   useEffect(() => {
-    if (room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting' || room?.currentPhase === 'results') {
+    if (room?.currentPhase === 'clueGiving' || room?.currentPhase === 'voting' || room?.currentPhase === 'results' || room?.currentPhase === 'fakerGuess') {
       fetchCluesData();
     }
   }, [room?.currentPhase, fetchCluesData]);
@@ -465,6 +535,26 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
     // Players should be able to view the final score screen
   }, [room?.currentPhase, router]);
 
+  const refreshConnection = useCallback(() => {
+    console.log('Refreshing connection...');
+    
+    // Clean up existing channel
+    if (channelRef.current) {
+      channelRef.current.unsubscribe();
+      channelRef.current = null;
+    }
+    
+    // Reset connection state
+    setIsConnected(false);
+    setConnectionError(null);
+    
+    // Re-fetch all data
+    fetchRoomData();
+    
+    // Trigger re-subscription
+    setSubscriptionTrigger(subscriptionTrigger + 1);
+  }, [fetchRoomData, subscriptionTrigger]);
+
   return {
     // Data state
     room,
@@ -475,6 +565,18 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
     playerClues,
     playerVotes,
     fakerGuessResult,
+    currentTurnPlayerId,
+    turnStartedAt,
+    buttonHolderIndex,
+    
+    // Ready state
+    playersReadyForClues: players.map(p => ({
+      playerId: p.id,
+      playerName: p.name,
+      isReady: p.isReadyForClues || false
+    })),
+    allPlayersReady: players.length > 0 && players.every(p => p.isReadyForClues),
+    currentPlayerReady: players.find(p => p.id === currentPlayerId)?.isReadyForClues || false,
     
     // Loading and error states
     isLoading,
@@ -485,6 +587,7 @@ export function useGameRealtime(roomId: string): UseGameRealtimeReturn {
     // Actions
     refreshData,
     submitClue,
-    submitVote: submitVoteAction
+    submitVote: submitVoteAction,
+    refreshConnection
   };
 }

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { useLobbyRealtime } from '@/hooks/useLobbyRealtime';
-import { leaveGame } from '@/lib/gameActions';
+import { leaveGame, initializeTurnOrder } from '@/lib/gameActions';
 
 export default function Lobby() {
   const params = useParams();
@@ -127,16 +127,19 @@ export default function Lobby() {
       const fakerId = players[randomPlayerIndex].id;
       console.log('Faker assigned:', players[randomPlayerIndex].name);
 
-      // Update the room to start the game
-      console.log('Updating room to start game...');
+      // Update the room to start the game with wordReveal phase first
+      console.log('Updating room to start game with wordReveal phase...');
       const { error: updateError } = await supabase
         .from('rooms')
         .update({
-          current_phase: 'clueGiving',
+          current_phase: 'wordReveal',
           word_grid: selectedWords,
           secret_word: secretWord,
           category: randomCategory.name,
-          current_round: 1
+          current_round: 1,
+          button_holder_index: 0,
+          current_turn_player_id: players[0].id, // First player goes first
+          turn_started_at: new Date().toISOString()
         })
         .eq('id', roomId);
 
@@ -158,10 +161,13 @@ export default function Lobby() {
       // Update room_players to set the faker role
       console.log('Setting player roles...');
       
-      // First, reset all players to regular
+      // First, reset all players to regular and clear ready state
       const { error: resetError } = await supabase
         .from('room_players')
-        .update({ role: 'regular' })
+        .update({ 
+          role: 'regular',
+          is_ready_for_clues: false
+        })
         .eq('room_id', roomId);
         
       if (resetError) throw resetError;
@@ -175,9 +181,17 @@ export default function Lobby() {
         
       if (fakerError) throw fakerError;
 
-      console.log('Room updated successfully, waiting for realtime redirect...');
-      // The realtime subscription will handle the redirect
-      console.log('Game started successfully');
+      // Initialize turn order for the game
+      console.log('Initializing turn order...');
+      const { error: turnOrderError } = await initializeTurnOrder(roomId);
+      
+      if (turnOrderError) {
+        console.error('Error initializing turn order:', turnOrderError);
+        throw new Error(turnOrderError);
+      }
+
+      console.log('Game started successfully with wordReveal phase');
+      console.log('Players will use the Ready button to proceed to clue giving phase');
     } catch (err: any) {
       console.error('Error starting game:', err);
       setIsStartingGame(false);

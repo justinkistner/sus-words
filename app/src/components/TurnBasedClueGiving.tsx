@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Toast } from './Toast';
 
 interface TurnBasedClueGivingProps {
   // Current player info
@@ -47,6 +48,17 @@ export default function TurnBasedClueGiving({
   onRevealComplete
 }: TurnBasedClueGivingProps) {
   const [timeRemaining, setTimeRemaining] = useState(60);
+  const [showToast, setShowToast] = useState(false);
+  
+  // Early debug check
+  if (!currentPlayerId) {
+    console.error('TurnBasedClueGiving: No currentPlayerId provided!');
+    return (
+      <div className="p-4 bg-red-600/20 border border-red-600 rounded-lg">
+        <p className="text-red-400">Error: Player identity not established. Please refresh the page.</p>
+      </div>
+    );
+  }
   
   // Find current turn player
   const currentTurnPlayer = players.find(p => p.id === currentTurnPlayerId);
@@ -61,6 +73,17 @@ export default function TurnBasedClueGiving({
     currentTurnPlayer: currentTurnPlayer?.name,
     turnStartedAt,
     players: players.map(p => ({ id: p.id, name: p.name }))
+  });
+  
+  // Additional debug for turn order display
+  console.log('Turn Order Debug:', {
+    sortedPlayers: players.map(p => ({
+      id: p.id,
+      name: p.name,
+      isMe: p.id === currentPlayerId,
+      isCurrent: p.id === currentTurnPlayerId,
+      displayName: p.id === currentPlayerId ? 'You' : p.name
+    }))
   });
   
   // Sort players by turn order
@@ -92,6 +115,11 @@ export default function TurnBasedClueGiving({
     (a.submissionOrder || 0) - (b.submissionOrder || 0)
   );
 
+  // Debug clue data
+  useEffect(() => {
+    console.log('TurnBasedClueGiving - playerClues:', playerClues);
+  }, [playerClues]);
+
   // Call onRevealComplete when component mounts if not already revealed
   useEffect(() => {
     if (!hasRevealedRole) {
@@ -99,9 +127,31 @@ export default function TurnBasedClueGiving({
     }
   }, [hasRevealedRole, onRevealComplete]);
   
+  // Show toast when clue is submitted
+  useEffect(() => {
+    if (hasSubmittedClue && isMyTurn) {
+      setShowToast(true);
+    }
+  }, [hasSubmittedClue, isMyTurn]);
+  
+  // Handle form submission with toast
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onClueSubmit(e);
+  };
+  
   // Show turn-based clue giving UI
   return (
     <div className="space-y-4 animate-fadeIn">
+      {/* Toast notification */}
+      {showToast && (
+        <Toast 
+          message="Clue submitted successfully!" 
+          type="success"
+          onClose={() => setShowToast(false)}
+        />
+      )}
+      
       {/* Combined role and turn indicator */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 border border-slate-600">
         <div className="flex items-center justify-between mb-3">
@@ -128,10 +178,11 @@ export default function TurnBasedClueGiving({
           </div>
         </div>
         
-        {/* Turn order with button holder */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Turn order with integrated clues */}
+        <div className="space-y-2">
           {sortedPlayers.map((player, index) => {
-            const hasSubmitted = playerClues.some(pc => pc.playerId === player.id);
+            const playerClue = playerClues.find(pc => pc.playerId === player.id);
+            const hasSubmitted = !!playerClue;
             const isCurrent = player.id === currentTurnPlayerId;
             const isMe = player.id === currentPlayerId;
             
@@ -139,91 +190,62 @@ export default function TurnBasedClueGiving({
               <div
                 key={player.id}
                 className={`
-                  px-3 py-1 rounded-full text-sm font-medium transition-all relative
-                  ${isCurrent ? 'bg-blue-600 text-white scale-110' : 
-                    hasSubmitted ? 'bg-green-600/20 text-green-400' : 
-                    'bg-slate-600 text-gray-400'}
+                  flex items-center gap-3 px-3 py-2 rounded-lg transition-all
+                  ${isCurrent && !hasSubmitted ? 'bg-blue-600/20 border border-blue-600' : 
+                    hasSubmitted ? 'bg-slate-700/50' : 
+                    'bg-slate-800/50'}
                 `}
               >
-                {isMe ? 'You' : player.name}
-                {hasSubmitted && ' ✓'}
+                <div className={`
+                  min-w-[80px] text-sm font-medium
+                  ${isCurrent && !hasSubmitted ? 'text-blue-400' : 
+                    hasSubmitted ? 'text-green-400' : 
+                    'text-gray-400'}
+                `}>
+                  {isMe ? 'You' : player.name}
+                  {hasSubmitted && ' ✓'}
+                </div>
+                
+                {/* Show clue input inline for current player */}
+                {isCurrent && isMe && !hasSubmitted && (
+                  <form onSubmit={handleSubmit} className="flex-1 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={clue}
+                      onChange={(e) => onClueChange(e.target.value)}
+                      className="flex-1 px-3 py-1 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Enter your clue..."
+                      disabled={isSubmittingClue}
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      disabled={!clue.trim() || isSubmittingClue}
+                      className="px-4 py-1 bg-blue-600 text-white font-medium rounded hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors text-sm"
+                    >
+                      {isSubmittingClue ? '...' : 'Submit'}
+                    </button>
+                  </form>
+                )}
+                
+                {/* Show submitted clue */}
+                {hasSubmitted && playerClue && (
+                  <div className="flex-1 text-sm text-gray-300">
+                    "{playerClue.clue}"
+                  </div>
+                )}
+                
+                {/* Show waiting status for other players */}
+                {isCurrent && !isMe && !hasSubmitted && (
+                  <div className="flex-1 text-sm text-gray-500 italic">
+                    Thinking...
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </div>
-      
-      {/* Clue submission (only if it's your turn) */}
-      {isMyTurn && !hasSubmittedClue && (
-        <form onSubmit={onClueSubmit} className="bg-slate-800 rounded-lg p-4 border-2 border-blue-500 animate-pulse-border">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={clue}
-              onChange={(e) => onClueChange(e.target.value)}
-              placeholder={isFaker ? "Enter a fake clue to blend in..." : `Enter a clue for "${secretWord}"...`}
-              className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={isSubmittingClue || hasSubmittedClue}
-              autoFocus
-            />
-            <button
-              type="submit"
-              disabled={!clue.trim() || isSubmittingClue || hasSubmittedClue}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-            >
-              {isSubmittingClue ? 'Submitting...' : 'Submit'}
-            </button>
-          </div>
-        </form>
-      )}
-      
-      {/* Waiting message with revealed clues */}
-      {!isMyTurn && !hasSubmittedClue && (
-        <div className="bg-slate-800 rounded-lg p-4">
-          <p className="text-gray-400 text-center mb-4">
-            Waiting for {currentTurnPlayer?.name || 'player'} to submit their clue...
-          </p>
-          
-          {/* Show revealed clues here */}
-          {sortedClues.length > 0 && (
-            <div className="border-t border-slate-700 pt-4">
-              <h4 className="text-sm font-semibold text-gray-400 mb-3">Clues revealed:</h4>
-              <div className="space-y-2">
-                {sortedClues.map((pc, index) => (
-                  <div key={pc.playerId} className="flex items-center gap-2 animate-slideIn" style={{ animationDelay: `${index * 0.1}s` }}>
-                    <span className="text-sm text-gray-500 w-6">{index + 1}.</span>
-                    <span className="text-sm font-medium text-white min-w-[80px]">{pc.playerName}:</span>
-                    <span className="text-sm text-blue-400 italic">"{pc.clue}"</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* Already submitted message with revealed clues */}
-      {hasSubmittedClue && (
-        <div className="bg-green-600/20 rounded-lg p-4 border border-green-600/30">
-          <p className="text-green-400 text-center mb-4">✓ Clue submitted! Waiting for other players...</p>
-          
-          {/* Show revealed clues here too */}
-          {sortedClues.length > 0 && (
-            <div className="border-t border-green-600/30 pt-4">
-              <h4 className="text-sm font-semibold text-gray-400 mb-3">Clues revealed:</h4>
-              <div className="space-y-2">
-                {sortedClues.map((pc, index) => (
-                  <div key={pc.playerId} className="flex items-center gap-2 animate-slideIn" style={{ animationDelay: `${index * 0.1}s` }}>
-                    <span className="text-sm text-gray-500 w-6">{index + 1}.</span>
-                    <span className="text-sm font-medium text-white min-w-[80px]">{pc.playerName}:</span>
-                    <span className="text-sm text-blue-400 italic">"{pc.clue}"</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-nunito: var(--font-nunito);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,8 +27,69 @@ body {
 }
 
 @layer utilities {
+  /* 3D Flip Animation Classes */
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  
+  .transform-style-preserve-3d {
+    transform-style: preserve-3d;
+  }
+  
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+  
+  .animate-spin-slow {
+    animation: spin-slow 2s linear infinite;
+  }
+  
+  @keyframes spin-slow {
+    from {
+      transform: rotateY(0deg);
+    }
+    to {
+      transform: rotateY(360deg);
+    }
+  }
+  
   .text-balance {
     text-wrap: balance;
+  }
+  
+  @keyframes flip {
+    0% {
+      transform: perspective(400px) rotateY(0);
+    }
+    50% {
+      transform: perspective(400px) rotateY(90deg);
+    }
+    100% {
+      transform: perspective(400px) rotateY(0);
+    }
+  }
+  
+  .animate-flip {
+    animation: flip 0.6s ease-in-out;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-fadeIn {
+    animation: fadeIn 0.3s ease-out;
   }
 }
 
@@ -59,6 +121,35 @@ body {
   }
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.5s ease-in-out;
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    border-color: rgb(59 130 246);
+  }
+  50% {
+    border-color: rgb(147 197 253);
+  }
+}
+
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out;
+  animation-fill-mode: both;
+}
+
+.animate-pulse-border {
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+.role-badge {
+  animation: fadeIn 0.3s ease-out;
 }

@@ -1,0 +1,160 @@
+'use client';
+
+import { GamePhaseContainer } from './GamePhaseContainer';
+import { PlayerRow } from './PlayerRow';
+import { Player } from '@/types/game';
+
+interface UnifiedResultsPhaseProps {
+  currentPlayerId: string;
+  players: Player[];
+  playerClues: Array<{ playerId: string; clue: string }>;
+  playerVotes: Array<{ voterId: string; votedForId: string }>;
+  playerRoles?: Record<string, 'player' | 'faker'>;
+  hasSubmittedVote: boolean;
+  isSubmittingVote: boolean;
+  isHost?: boolean;
+  onProceedToFakerGuess?: () => void;
+  onProceedToNextRound?: () => void;
+  onViewFinalScores?: () => void;
+  currentRound?: number;
+  totalRounds?: number;
+}
+
+export function UnifiedResultsPhase({
+  currentPlayerId,
+  players,
+  playerClues,
+  playerVotes,
+  playerRoles,
+  hasSubmittedVote,
+  isSubmittingVote,
+  isHost,
+  onProceedToFakerGuess,
+  onProceedToNextRound,
+  onViewFinalScores,
+  currentRound,
+  totalRounds
+}: UnifiedResultsPhaseProps) {
+  // Calculate vote counts
+  const voteCounts = playerVotes.reduce((acc, vote) => {
+    acc[vote.votedForId] = (acc[vote.votedForId] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Get who voted for each player
+  const getVotersForPlayer = (playerId: string) => {
+    return playerVotes
+      .filter(v => v.votedForId === playerId)
+      .map(v => {
+        const voter = players.find(p => p.id === v.voterId);
+        return voter?.name || 'Unknown';
+      });
+  };
+
+  // Find the faker
+  const fakerId = Object.entries(playerRoles || {}).find(([_, role]) => role === 'faker')?.[0];
+  const fakerVotes = fakerId ? (voteCounts[fakerId] || 0) : 0;
+  
+  // Determine if faker was caught (got the most votes or tied for most)
+  const maxVotes = Math.max(...Object.values(voteCounts), 0);
+  const fakerWasCaught = fakerId && fakerVotes > 0 && fakerVotes === maxVotes;
+
+  // Calculate points for each player
+  const calculatePoints = (playerId: string) => {
+    const playerRole = playerRoles?.[playerId];
+    const voteCount = voteCounts[playerId] || 0;
+    
+    if (playerRole === 'faker') {
+      // Faker gets 2 points if they escape detection (not caught)
+      return fakerWasCaught ? 0 : 2;
+    } else {
+      // Players get points based on whether faker was caught
+      if (fakerWasCaught) {
+        // If faker was caught, players who voted for faker get 2 points
+        const votedForFaker = playerVotes.some(v => v.voterId === playerId && v.votedForId === fakerId);
+        return votedForFaker ? 2 : 0;
+      } else {
+        // If faker wasn't caught, all players get 0 points
+        return 0;
+      }
+    }
+  };
+
+  // Sort players by vote count (descending)
+  const sortedPlayers = [...players].sort((a, b) => {
+    const aVotes = voteCounts[a.id] || 0;
+    const bVotes = voteCounts[b.id] || 0;
+    return bVotes - aVotes;
+  });
+
+  return (
+    <GamePhaseContainer
+      title="Voting Results"
+      subtitle={fakerWasCaught ? "The faker was caught!" : "The faker escaped detection!"}
+      phase="results"
+    >
+      {sortedPlayers.map((player) => {
+        const isCurrentPlayer = player.id === currentPlayerId;
+        const voteCount = voteCounts[player.id] || 0;
+        const voters = getVotersForPlayer(player.id);
+        const playerClue = playerClues.find(c => c.playerId === player.id);
+        const playerRole = playerRoles?.[player.id];
+
+        return (
+          <PlayerRow
+            key={player.id}
+            playerId={player.id}
+            playerName={player.name}
+            isCurrentPlayer={isCurrentPlayer}
+            leftContent={
+              <div className="flex items-center">
+                {/* Player name */}
+                <span className="font-medium">
+                  {isCurrentPlayer ? 'You' : player.name}
+                </span>
+              </div>
+            }
+            centerContent={
+              <div className="flex flex-col gap-1">
+                {playerClue && (
+                  <span className="text-blue-400">{playerClue.clue}</span>
+                )}
+                {voters.length > 0 && (
+                  <span className="text-xs text-gray-400">
+                    Voted by: {voters.join(', ')}
+                  </span>
+                )}
+              </div>
+            }
+            rightContent={
+              <div className="flex items-center gap-3">
+                {/* Role badge */}
+                {playerRole && (
+                  <div className={`px-3 py-1 rounded-lg text-sm font-bold ${
+                    playerRole === 'faker' 
+                      ? 'bg-red-600 text-white' 
+                      : 'bg-green-600 text-white'
+                  }`}>
+                    {playerRole.toUpperCase()}
+                  </div>
+                )}
+                {/* Points awarded */}
+                <div className="text-sm font-medium">
+                  {(() => {
+                    const points = calculatePoints(player.id);
+                    return points > 0 ? (
+                      <span className="text-green-400">+{points}</span>
+                    ) : (
+                      <span className="text-gray-400">+0</span>
+                    );
+                  })()}
+                </div>
+              </div>
+            }
+          />
+        );
+      })}
+
+    </GamePhaseContainer>
+  );
+}

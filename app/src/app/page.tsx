@@ -16,7 +16,7 @@ export default function Home() {
               className="mx-auto"
             />
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">
+          <h1 className="text-5xl md:text-6xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500 font-nunito">
             Sus Word
           </h1>
           <p className="text-xl md:text-2xl text-slate-300 mb-8">

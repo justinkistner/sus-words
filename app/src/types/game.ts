@@ -13,6 +13,7 @@ export type Player = {
   score: number;
   isReady: boolean;
   isHost: boolean;
+  isReadyForClues?: boolean;
   clue?: string;
   vote?: string; // ID of the player they voted for
 };
@@ -33,4 +34,8 @@ export type GameRoom = {
   timePerVote?: number; // in seconds
   scores?: Record<string, number>;
   gameMode: GameMode;
+  // Turn-based fields
+  currentTurnPlayerId?: string | null;
+  turnStartedAt?: string | null;
+  buttonHolderIndex?: number | null;
 };

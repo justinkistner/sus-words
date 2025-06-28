@@ -10,6 +10,7 @@ interface Vote {
 interface Player {
   player_id: string;
   role?: string;
+  turn_order?: number;
 }
 
 interface Word {
@@ -18,6 +19,10 @@ interface Word {
 
 interface RoomData {
   host_id: string;
+  button_holder_index?: number;
+  current_turn_player_id?: string;
+  turn_started_at?: string;
+  current_round?: number;
 }
 
 interface RoundData {
@@ -37,6 +42,8 @@ interface Clue {
   player_id: string;
   round_number: number;
   clue_text: string;
+  submission_order?: number;
+  submitted_at?: string;
 }
 
 interface ScoreUpdate {
@@ -274,55 +281,73 @@ export async function submitClue(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
   
+  console.log('submitClue function called with:', {
+    roomId,
+    playerId,
+    clueText,
+    roundNumber,
+    clueTextType: typeof clueText,
+    clueTextLength: clueText?.length
+  });
+  
   try {
-    // Insert the clue
-    const { error: clueError } = await supabase
+    // Verify it's this player's turn
+    const { data: room, error: roomError } = await supabase
+      .from('rooms')
+      .select('current_turn_player_id, current_phase')
+      .eq('id', roomId)
+      .single();
+      
+    if (roomError) throw new Error(roomError.message);
+    if (!room) throw new Error('Room not found');
+    
+    if (room.current_phase !== 'clueGiving') {
+      throw new Error('Not in clue giving phase');
+    }
+    
+    if (room.current_turn_player_id !== playerId) {
+      throw new Error('Not your turn');
+    }
+    
+    // Get submission order
+    const { count, error: countError } = await supabase
+      .from('clues')
+      .select('*', { count: 'exact', head: true })
+      .eq('room_id', roomId)
+      .eq('round_number', roundNumber);
+      
+    if (countError) throw new Error(countError.message);
+    
+    const submissionOrder = (count || 0) + 1;
+    
+    console.log('About to insert clue with data:', {
+      room_id: roomId,
+      player_id: playerId,
+      round_number: roundNumber,
+      clue_text: clueText,
+      submission_order: submissionOrder,
+      submitted_at: new Date().toISOString()
+    });
+    
+    // Insert clue with submission order
+    const { error: insertError } = await supabase
       .from('clues')
       .insert({
         room_id: roomId,
         player_id: playerId,
         round_number: roundNumber,
-        clue_text: clueText
+        clue_text: clueText,
+        submission_order: submissionOrder,
+        submitted_at: new Date().toISOString()
       });
       
-    if (clueError) throw new Error(clueError.message);
-    
-    // Check if all players have submitted clues
-    const { data: players, error: playersError } = await supabase
-      .from('room_players')
-      .select('player_id')
-      .eq('room_id', roomId);
-      
-    if (playersError) throw new Error(playersError.message);
-    
-    const { data: clues, error: cluesError } = await supabase
-      .from('clues')
-      .select('player_id')
-      .eq('room_id', roomId)
-      .eq('round_number', roundNumber);
-      
-    if (cluesError) throw new Error(cluesError.message);
-    
-    console.log('Phase transition check:', {
-      playerCount: players?.length,
-      clueCount: clues?.length,
-      shouldTransition: players && clues && players.length === clues.length
-    });
-    
-    // If all players have submitted clues, transition to voting phase
-    if (players && clues && players.length === clues.length) {
-      console.log('Transitioning to voting phase...');
-      const { error: updateError } = await supabase
-        .from('rooms')
-        .update({ current_phase: 'voting' })
-        .eq('id', roomId);
-        
-      if (updateError) {
-        console.error('Failed to transition to voting phase:', updateError);
-        throw new Error(updateError.message);
-      }
-      console.log('Successfully transitioned to voting phase');
+    if (insertError) {
+      console.error('Error inserting clue:', insertError);
+      throw new Error(insertError.message);
     }
+    
+    // Advance to next turn
+    await advanceToNextTurn(roomId);
     
     return { success: true };
   } catch (error) {
@@ -484,7 +509,7 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
     // Get current room data
     const { data: room, error: roomError } = await supabase
       .from('rooms')
-      .select('current_round, total_rounds, category')
+      .select('current_round, total_rounds, category, button_holder_index')
       .eq('id', roomId)
       .single();
       
@@ -516,11 +541,12 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
       return { success: true };
     }
     
-    // Get all players
+    // Get all players in turn order
     const { data: players, error: playersError } = await supabase
       .from('room_players')
-      .select('player_id')
-      .eq('room_id', roomId);
+      .select('player_id, turn_order')
+      .eq('room_id', roomId)
+      .order('turn_order', { ascending: true });
       
     if (playersError) {
       console.error('Error fetching players:', playersError);
@@ -531,10 +557,17 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
       throw new Error(`Not enough players to continue (found ${players?.length || 0} players)`);
     }
     
+    // Rotate button holder for next round
+    const currentButtonIndex = (room.button_holder_index as number) || 0;
+    const nextButtonIndex = (currentButtonIndex + 1) % players.length;
+    
     // Select a new faker randomly
     const randomIndex = Math.floor(Math.random() * players.length);
-    const newFakerId = (players as Player[])[randomIndex].player_id;
+    const newFakerId = (players as any[])[randomIndex].player_id;
     console.log('New faker selected:', newFakerId);
+    
+    // Determine first player based on button holder
+    const firstPlayerId = (players as any[])[nextButtonIndex].player_id;
     
     // First get the category ID
     const { data: category, error: categoryError } = await supabase
@@ -575,10 +608,13 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
     console.log('New secret word selected');
     
     // Start a transaction to update everything atomically
-    // First, reset player roles
+    // First, reset player roles and clear ready state
     const { error: resetRolesError } = await supabase
       .from('room_players')
-      .update({ role: 'regular' })
+      .update({ 
+        role: 'regular',
+        is_ready_for_clues: false
+      })
       .eq('room_id', roomId);
       
     if (resetRolesError) {
@@ -616,21 +652,27 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
     // Small delay to ensure database consistency
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // NOW update room state - this will trigger clients to fetch the new round data
-    const { error: roomUpdateError } = await supabase
+    // First update to wordReveal phase for role assignment animation
+    const { error: wordRevealUpdateError } = await supabase
       .from('rooms')
       .update({
-        current_phase: 'clueGiving',
+        current_phase: 'wordReveal',
         current_round: nextRound,
         word_grid: wordGrid,
-        secret_word: secretWord
+        secret_word: secretWord,
+        button_holder_index: nextButtonIndex,
+        current_turn_player_id: firstPlayerId,
+        turn_started_at: new Date().toISOString()
       })
       .eq('id', roomId);
       
-    if (roomUpdateError) {
-      console.error('Error updating room:', roomUpdateError);
-      throw new Error(`Failed to update room: ${roomUpdateError.message}`);
+    if (wordRevealUpdateError) {
+      console.error('Error updating room to wordReveal:', wordRevealUpdateError);
+      throw new Error(`Failed to update room to wordReveal: ${wordRevealUpdateError.message}`);
     }
+    
+    console.log('Room updated to wordReveal phase');
+    console.log('Players will use Ready buttons to proceed to clue giving phase');
     
     // Clean up old clues and votes from previous rounds
     const { error: cleanupCluesError } = await supabase
@@ -655,5 +697,195 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
     console.error('Error starting next round:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to start next round';
     return { success: false, error: errorMessage };
+  }
+}
+
+// New function to initialize turn order when game starts
+export async function initializeTurnOrder(roomId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  
+  try {
+    // Get all players
+    const { data: players, error: playersError } = await supabase
+      .from('room_players')
+      .select('player_id')
+      .eq('room_id', roomId);
+      
+    if (playersError) throw new Error(playersError.message);
+    if (!players || players.length === 0) throw new Error('No players found');
+    
+    // Shuffle players for random turn order
+    const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
+    
+    // Update each player with their turn order
+    for (let i = 0; i < shuffledPlayers.length; i++) {
+      const { error: updateError } = await supabase
+        .from('room_players')
+        .update({ turn_order: i })
+        .eq('room_id', roomId)
+        .eq('player_id', (shuffledPlayers[i] as any).player_id);
+        
+      if (updateError) throw new Error(updateError.message);
+    }
+    
+    // Set initial button holder (index 0)
+    const { error: roomUpdateError } = await supabase
+      .from('rooms')
+      .update({ 
+        button_holder_index: 0,
+        current_turn_player_id: (shuffledPlayers[0] as any).player_id,
+        turn_started_at: new Date().toISOString()
+      })
+      .eq('id', roomId);
+      
+    if (roomUpdateError) throw new Error(roomUpdateError.message);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error initializing turn order:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to initialize turn order' };
+  }
+}
+
+// New function to advance to next turn
+export async function advanceToNextTurn(roomId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  
+  try {
+    // Get current room state
+    const { data: room, error: roomError } = await supabase
+      .from('rooms')
+      .select('current_turn_player_id, current_round')
+      .eq('id', roomId)
+      .single();
+      
+    if (roomError) throw new Error(roomError.message);
+    if (!room) throw new Error('Room not found');
+    
+    const currentRound = room.current_round as number;
+    
+    // Get all players in turn order
+    const { data: players, error: playersError } = await supabase
+      .from('room_players')
+      .select('player_id, turn_order')
+      .eq('room_id', roomId)
+      .order('turn_order', { ascending: true });
+      
+    if (playersError) throw new Error(playersError.message);
+    if (!players || players.length === 0) throw new Error('No players found');
+    
+    // Find current player index
+    const currentIndex = players.findIndex(p => (p as any).player_id === room.current_turn_player_id);
+    if (currentIndex === -1) throw new Error('Current player not found');
+    
+    // Check if all players have submitted clues
+    const { data: clues, error: cluesError } = await supabase
+      .from('clues')
+      .select('player_id')
+      .eq('room_id', roomId)
+      .eq('round_number', currentRound);
+      
+    if (cluesError) throw new Error(cluesError.message);
+    
+    // If all players have submitted clues, move to voting phase
+    if (clues && clues.length >= players.length) {
+      const { error: phaseError } = await supabase
+        .from('rooms')
+        .update({ 
+          current_phase: 'voting',
+          current_turn_player_id: null,
+          turn_started_at: null
+        })
+        .eq('id', roomId);
+        
+      if (phaseError) throw new Error(phaseError.message);
+      return { success: true };
+    }
+    
+    // Find next player who hasn't submitted a clue
+    let nextIndex = (currentIndex + 1) % players.length;
+    let attempts = 0;
+    
+    while (attempts < players.length) {
+      const nextPlayerId = (players[nextIndex] as any).player_id;
+      const hasSubmitted = clues?.some(c => (c as any).player_id === nextPlayerId);
+      
+      if (!hasSubmitted) {
+        // Update room with next player's turn
+        const { error: updateError } = await supabase
+          .from('rooms')
+          .update({ 
+            current_turn_player_id: nextPlayerId,
+            turn_started_at: new Date().toISOString()
+          })
+          .eq('id', roomId);
+          
+        if (updateError) throw new Error(updateError.message);
+        return { success: true };
+      }
+      
+      nextIndex = (nextIndex + 1) % players.length;
+      attempts++;
+    }
+    
+    // This shouldn't happen, but if it does, move to voting
+    const { error: phaseError } = await supabase
+      .from('rooms')
+      .update({ 
+        current_phase: 'voting',
+        current_turn_player_id: null,
+        turn_started_at: null
+      })
+      .eq('id', roomId);
+      
+    if (phaseError) throw new Error(phaseError.message);
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error advancing turn:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to advance turn' };
+  }
+}
+
+export async function viewFinalScores(roomId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  
+  try {
+    // Check if the game is in a valid state to view final scores
+    const { data: roomData, error: roomError } = await supabase
+      .from('rooms')
+      .select('current_phase, current_round, total_rounds')
+      .eq('id', roomId)
+      .single();
+      
+    if (roomError) throw new Error(roomError.message);
+    
+    const room = roomData as { current_phase: string; current_round: number; total_rounds: number };
+    
+    // Only allow viewing final scores if the game has completed all rounds
+    if (room.current_round < room.total_rounds) {
+      return { success: false, error: 'Game is not finished yet' };
+    }
+    
+    // Only allow transition from results phase to finished phase
+    if (room.current_phase !== 'results') {
+      return { success: false, error: 'Can only view final scores after results phase' };
+    }
+    
+    // Update the room to 'finished' phase to show final scores
+    const { error: updateError } = await supabase
+      .from('rooms')
+      .update({ current_phase: 'finished' })
+      .eq('id', roomId);
+      
+    if (updateError) throw new Error(updateError.message);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error viewing final scores:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to view final scores' 
+    };
   }
 }
