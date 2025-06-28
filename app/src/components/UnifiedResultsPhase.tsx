@@ -87,17 +87,21 @@ export function UnifiedResultsPhase({
     return bVotes - aVotes;
   });
 
+  const combinedMessage = fakerWasCaught 
+    ? "The faker was caught! Players who voted for the faker get 2 points. Everyone else gets 0."
+    : "The faker escaped detection! They get 2 points. Everyone else gets 0.";
+
   return (
     <GamePhaseContainer
       title="Voting Results"
-      subtitle={fakerWasCaught ? "The faker was caught!" : "The faker escaped detection!"}
+      subtitle={combinedMessage}
       phase="results"
     >
+
       {sortedPlayers.map((player) => {
         const isCurrentPlayer = player.id === currentPlayerId;
         const voteCount = voteCounts[player.id] || 0;
         const voters = getVotersForPlayer(player.id);
-        const playerClue = playerClues.find(c => c.playerId === player.id);
         const playerRole = playerRoles?.[player.id];
 
         return (
@@ -107,37 +111,7 @@ export function UnifiedResultsPhase({
             playerName={player.name}
             isCurrentPlayer={isCurrentPlayer}
             leftContent={
-              <div className="flex items-center">
-                {/* Player name */}
-                <span className="font-medium">
-                  {isCurrentPlayer ? 'You' : player.name}
-                </span>
-              </div>
-            }
-            centerContent={
-              <div className="flex flex-col gap-1">
-                {playerClue && (
-                  <span className="text-blue-400">{playerClue.clue}</span>
-                )}
-                {voters.length > 0 && (
-                  <span className="text-xs text-gray-400">
-                    Voted by: {voters.join(', ')}
-                  </span>
-                )}
-              </div>
-            }
-            rightContent={
               <div className="flex items-center gap-3">
-                {/* Role badge */}
-                {playerRole && (
-                  <div className={`px-3 py-1 rounded-lg text-sm font-bold ${
-                    playerRole === 'faker' 
-                      ? 'bg-red-600 text-white' 
-                      : 'bg-green-600 text-white'
-                  }`}>
-                    {playerRole.toUpperCase()}
-                  </div>
-                )}
                 {/* Points awarded */}
                 <div className="text-sm font-medium">
                   {(() => {
@@ -149,6 +123,30 @@ export function UnifiedResultsPhase({
                     );
                   })()}
                 </div>
+                {/* Player name */}
+                <span className="font-medium">
+                  {isCurrentPlayer ? 'You' : player.name}
+                </span>
+              </div>
+            }
+            centerContent={
+              <div className="flex items-center">
+                {/* Role indicator (faker only, no label) */}
+                {playerRole === 'faker' && (
+                  <div className="px-3 py-1 rounded-lg text-sm font-bold bg-red-600 text-white">
+                    FAKER
+                  </div>
+                )}
+              </div>
+            }
+            rightContent={
+              <div className="flex items-center">
+                {/* Voting information */}
+                {voters.length > 0 && (
+                  <span className="text-xs text-gray-400">
+                    Voted by: {voters.join(', ')}
+                  </span>
+                )}
               </div>
             }
           />

@@ -358,8 +358,19 @@ export default function Game() {
         
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2 sm:gap-0">
-          <div>
+          <div className="flex items-center gap-3">
+            {/* Game logo in upper left */}
+            <img 
+              src="/sus-words-logo.png" 
+              alt="Sus Words" 
+              className="h-10 sm:h-12 w-auto"
+            />
+          </div>
+          
+          {/* Centered room name */}
+          <div className="flex-1 text-center">
             <h1 className="text-lg sm:text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">{room?.name || 'Loading...'}</h1>
+            <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">ROOM</p>
           </div>
           
           <div className="text-right">
@@ -371,71 +382,85 @@ export default function Game() {
             )}
             
             {/* Next Round Button (Results Phase Only) */}
-            {room?.currentPhase === 'results' && isHost && (
+            {room?.currentPhase === 'results' && (
               <>
-                {room?.currentRound < room?.totalRounds ? (
-                  <button
-                    onClick={async () => {
-                      if (room?.currentRound >= room?.totalRounds) {
-                        // Transition to finished phase
-                        const supabase = createClient();
-                        await supabase
-                          .from('rooms')
-                          .update({ current_phase: 'finished' })
-                          .eq('id', roomId);
-                        return;
-                      }
-                      
-                      setIsStartingNextRound(true);
-                      try {
-                        const result = await startNextRound(roomId);
-                        
-                        if (!result.success) {
-                          console.error('Failed to start next round:', result.error);
-                          setToastMessage(`Failed to start next round: ${result.error || 'Unknown error'}`);
-                          setToastType('error');
-                          setShowToast(true);
-                          setIsStartingNextRound(false);
-                        } else {
-                          // Reset local state for new round
-                          setClue('');
-                          setSubmittedClue(false);
-                          setSelectedVote(null);
-                          setFakerGuess('');
-                          setHasSubmittedVote(false);
-                          setIsStartingNextRound(false);
-                        }
-                      } catch (error) {
-                        console.error('Error starting next round:', error);
-                        setToastMessage(`Error starting next round: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                        setToastType('error');
-                        setShowToast(true);
-                        setIsStartingNextRound(false);
-                      }
-                    }}
-                    disabled={isStartingNextRound}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded font-medium transition-colors"
-                  >
-                    {isStartingNextRound ? 'Starting...' : 'Next Round'}
-                  </button>
+                {isHost ? (
+                  <>
+                    {room?.currentRound < room?.totalRounds ? (
+                      <button
+                        onClick={async () => {
+                          if (room?.currentRound >= room?.totalRounds) {
+                            // Transition to finished phase
+                            const supabase = createClient();
+                            await supabase
+                              .from('rooms')
+                              .update({ current_phase: 'finished' })
+                              .eq('id', roomId);
+                            return;
+                          }
+                          
+                          setIsStartingNextRound(true);
+                          try {
+                            const result = await startNextRound(roomId);
+                            
+                            if (!result.success) {
+                              console.error('Failed to start next round:', result.error);
+                              setToastMessage(`Failed to start next round: ${result.error || 'Unknown error'}`);
+                              setToastType('error');
+                              setShowToast(true);
+                              setIsStartingNextRound(false);
+                            } else {
+                              // Reset local state for new round
+                              setClue('');
+                              setSubmittedClue(false);
+                              setSelectedVote(null);
+                              setFakerGuess('');
+                              setHasSubmittedVote(false);
+                              setIsStartingNextRound(false);
+                            }
+                          } catch (error) {
+                            console.error('Error starting next round:', error);
+                            setToastMessage(`Error starting next round: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                            setToastType('error');
+                            setShowToast(true);
+                            setIsStartingNextRound(false);
+                          }
+                        }}
+                        disabled={isStartingNextRound}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded font-medium transition-colors"
+                      >
+                        {isStartingNextRound ? 'Starting...' : `Start round ${(room?.currentRound || 0) + 1} of ${room?.totalRounds || 1}`}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          const result = await viewFinalScores(roomId);
+                          if (result.success) {
+                            setToastMessage('Final scores viewed!');
+                            setToastType('success');
+                            setShowToast(true);
+                          } else {
+                            setToastMessage(`Error: ${result.error}`);
+                            setToastType('error');
+                            setShowToast(true);
+                          }
+                        }}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
+                      >
+                        View Final Score
+                      </button>
+                    )}
+                  </>
                 ) : (
-                  <button
-                    onClick={async () => {
-                      const result = await viewFinalScores(roomId);
-                      if (result.success) {
-                        setToastMessage('Final scores viewed!');
-                        setToastType('success');
-                        setShowToast(true);
-                      } else {
-                        setToastMessage(`Error: ${result.error}`);
-                        setToastType('error');
-                        setShowToast(true);
-                      }
-                    }}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
-                  >
-                    View Final Score
-                  </button>
+                  <div className="text-center p-4 bg-gray-800 rounded-lg">
+                    <p className="text-gray-300">
+                      {room?.currentRound < room?.totalRounds ? (
+                        <>Waiting for host to start round {(room?.currentRound || 0) + 1} of {room?.totalRounds || 1}...</>
+                      ) : (
+                        <>Waiting for host to view final scores...</>
+                      )}
+                    </p>
+                  </div>
                 )}
               </>
             )}
@@ -763,12 +788,12 @@ export default function Game() {
       
       {/* Footer */}
       {room?.currentPhase !== 'finished' && (
-        <div className={`flex flex-col sm:flex-row gap-2 sm:gap-0 items-stretch sm:items-center p-4 bg-slate-800 rounded-lg shadow-lg ${isHost ? 'sm:justify-between' : 'sm:justify-end'}`}>
+        <div className={`flex flex-col sm:flex-row gap-2 sm:gap-0 items-stretch sm:items-center p-4 ${isHost ? 'sm:justify-between' : 'sm:justify-end'}`}>
           {isHost && (
             <button
               onClick={handleEndGame}
               disabled={isEndingGame}
-              className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
             >
               {isEndingGame ? 'Ending...' : 'End Game'}
             </button>
@@ -776,7 +801,7 @@ export default function Game() {
           <button
             onClick={handleLeaveGame}
             disabled={isLeaving}
-            className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+            className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
           >
             {isLeaving ? 'Leaving...' : 'Leave Game'}
           </button>
