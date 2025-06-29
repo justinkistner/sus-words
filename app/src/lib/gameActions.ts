@@ -611,7 +611,10 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
   const supabase = createClient();
   
   try {
-    console.log('Starting next round for room:', roomId);
+    console.log('🚨🚨🚨 START_NEXT_ROUND FUNCTION CALLED 🚨🚨🚨');
+    console.log('Room ID:', roomId);
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('🚨🚨🚨 FUNCTION EXECUTION CONFIRMED 🚨🚨🚨');
     
     // Get current room data
     const { data: room, error: roomError } = await supabase
@@ -812,11 +815,16 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
       
     if (cleanupVotesError) console.error('Error cleaning up old votes:', cleanupVotesError);
     
-    console.log('Successfully started next round');
+    console.log('🎉🎉🎉 NEXT ROUND STARTED SUCCESSFULLY 🎉🎉🎉');
+    console.log('New category should be:', selectedCategory.name);
+    console.log('New secret word should be set');
+    console.log('🎉🎉🎉 FUNCTION COMPLETED SUCCESSFULLY 🎉🎉🎉');
     return { success: true };
   } catch (error) {
-    console.error('Error starting next round:', error);
+    console.error('💥💥💥 ERROR IN START_NEXT_ROUND 💥💥💥');
+    console.error('Error details:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to start next round';
+    console.error('💥💥💥 FUNCTION FAILED 💥💥💥');
     return { success: false, error: errorMessage };
   }
 }
