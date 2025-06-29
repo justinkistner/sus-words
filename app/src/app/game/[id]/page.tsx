@@ -653,6 +653,7 @@ export default function Game() {
                 isHost={isHost}
                 currentRound={room?.currentRound}
                 totalRounds={room?.totalRounds}
+                fakerGuessResult={fakerGuessResult}
                 onProceedToFakerGuess={async () => {
                   try {
                     const supabase = createClient();

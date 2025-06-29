@@ -18,6 +18,7 @@ interface UnifiedResultsPhaseProps {
   onViewFinalScores?: () => void;
   currentRound?: number;
   totalRounds?: number;
+  fakerGuessResult?: { guess: string | null; isCorrect: boolean } | null;
 }
 
 export function UnifiedResultsPhase({
@@ -33,7 +34,8 @@ export function UnifiedResultsPhase({
   onProceedToNextRound,
   onViewFinalScores,
   currentRound,
-  totalRounds
+  totalRounds,
+  fakerGuessResult
 }: UnifiedResultsPhaseProps) {
   // Calculate vote counts
   const voteCounts = playerVotes.reduce((acc, vote) => {
@@ -65,14 +67,31 @@ export function UnifiedResultsPhase({
     const voteCount = voteCounts[playerId] || 0;
     
     if (playerRole === 'faker') {
-      // Faker gets 2 points if they escape detection (not caught)
-      return fakerWasCaught ? 0 : 2;
+      if (fakerWasCaught) {
+        // Faker was caught - check if they guessed correctly
+        if (fakerGuessResult && fakerGuessResult.isCorrect) {
+          // Faker guessed correctly after being caught - gets 1 point
+          return 1;
+        } else {
+          // Faker was caught and failed to guess - gets 0 points
+          return 0;
+        }
+      } else {
+        // Faker escaped detection - gets 2 points
+        return 2;
+      }
     } else {
       // Players get points based on whether faker was caught
       if (fakerWasCaught) {
-        // If faker was caught, players who voted for faker get 2 points
-        const votedForFaker = playerVotes.some(v => v.voterId === playerId && v.votedForId === fakerId);
-        return votedForFaker ? 2 : 0;
+        // If faker was caught, check if faker guessed correctly
+        if (fakerGuessResult && fakerGuessResult.isCorrect) {
+          // Faker guessed correctly - players who voted for faker get 0 points
+          return 0;
+        } else {
+          // Faker failed to guess - players who voted for faker get 2 points
+          const votedForFaker = playerVotes.some(v => v.voterId === playerId && v.votedForId === fakerId);
+          return votedForFaker ? 2 : 0;
+        }
       } else {
         // If faker wasn't caught, all players get 0 points
         return 0;
@@ -87,9 +106,17 @@ export function UnifiedResultsPhase({
     return bVotes - aVotes;
   });
 
-  const combinedMessage = fakerWasCaught 
-    ? "The faker was caught! Players who voted for the faker get 2 points. Everyone else gets 0."
-    : "The faker escaped detection! They get 2 points. Everyone else gets 0.";
+  const combinedMessage = (() => {
+    if (fakerWasCaught) {
+      if (fakerGuessResult && fakerGuessResult.isCorrect) {
+        return "The faker was caught but guessed the word correctly! They get 1 point. Everyone else gets 0.";
+      } else {
+        return "The faker was caught and failed to guess the word! Players who voted for the faker get 2 points. Everyone else gets 0.";
+      }
+    } else {
+      return "The faker escaped detection! They get 2 points. Everyone else gets 0.";
+    }
+  })();
 
   return (
     <GamePhaseContainer
