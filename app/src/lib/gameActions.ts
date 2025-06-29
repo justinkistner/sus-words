@@ -484,17 +484,26 @@ export async function calculateAndUpdateScores(
     const mostVotedId = Object.entries(voteCount).find(([_, count]) => count === maxVotes)?.[0];
     
     // Determine scoring based on voting outcome
-    const fakerWonVote = mostVotedId === fakerId;
+    const fakerWasCaught = mostVotedId === fakerId;
+    
+    console.log('Scoring Debug:', {
+      fakerId,
+      mostVotedId,
+      fakerWasCaught,
+      isCorrect,
+      voteCount
+    });
     
     // Calculate scores for each player
     const scoreUpdates: ScoreUpdate[] = [];
     
-    if (fakerWonVote) {
+    if (fakerWasCaught) {
       // Faker was caught
       if (isCorrect) {
         // Faker guessed the word correctly, give them 1 point
         if (fakerId) {
           scoreUpdates.push({ playerId: fakerId, points: 1 });
+          console.log('Faker caught but guessed correctly: +1 point to faker');
         }
       } else {
         // Faker failed to guess the word, players who voted for faker get 2 points
@@ -503,15 +512,19 @@ export async function calculateAndUpdateScores(
             scoreUpdates.push({ playerId: vote.voter_id, points: 2 });
           }
         });
+        console.log('Faker caught and failed to guess: +2 points to voters who caught faker');
       }
     } else {
       // Faker escaped - faker gets 2 points
       if (fakerId) {
         scoreUpdates.push({ playerId: fakerId, points: 2 });
+        console.log('Faker escaped: +2 points to faker');
       }
     }
     
     // Update scores in database
+    console.log('Applying score updates:', scoreUpdates);
+    
     for (const update of scoreUpdates) {
       try {
         const { data, error: updateError } = await supabase.rpc('increment_player_score', {
@@ -521,7 +534,7 @@ export async function calculateAndUpdateScores(
         });
         
         if (updateError) {
-          console.error(`Error updating score for player "${update.playerId}":`, updateError);
+          console.error(`Error updating score for player ${update.playerId}:`, updateError);
           // Continue with other updates even if one fails
         } else {
           console.log(`Successfully updated score for player ${update.playerId}: +${update.points} points`);
@@ -531,6 +544,10 @@ export async function calculateAndUpdateScores(
       }
     }
     
+    // Add a small delay to ensure database changes propagate before UI updates
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    console.log('Score calculation completed');
     return { success: true };
   } catch (error) {
     console.error('Error calculating scores:', error);
@@ -659,27 +676,30 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
     // Determine first player based on button holder
     const firstPlayerId = (players as any[])[nextButtonIndex].player_id;
     
-    // First get the category ID
-    const { data: category, error: categoryError } = await supabase
+    // Get all categories and select a random one for this round
+    const { data: categories, error: categoriesError } = await supabase
       .from('categories')
-      .select('id')
-      .eq('name', room.category as string)
-      .single();
+      .select('id, name');
       
-    if (categoryError) {
-      console.error('Error fetching category:', categoryError);
-      throw new Error(`Failed to fetch category: ${categoryError.message}`);
+    if (categoriesError) {
+      console.error('Error fetching categories:', categoriesError);
+      throw new Error(`Failed to fetch categories: ${categoriesError.message}`);
     }
     
-    if (!category) {
-      throw new Error(`Category "${room.category}" not found`);
+    if (!categories || categories.length === 0) {
+      throw new Error('No categories found');
     }
+    
+    // Select a random category for this round
+    const randomCategoryIndex = Math.floor(Math.random() * categories.length);
+    const selectedCategory = (categories as Category[])[randomCategoryIndex];
+    console.log('New category selected for round:', selectedCategory.name);
     
     // Get new words for the grid
     const { data: words, error: wordsError } = await supabase
       .from('words')
       .select('word')
-      .eq('category_id', (category as Category).id)
+      .eq('category_id', selectedCategory.id)
       .limit(16);
       
     if (wordsError) {
@@ -688,7 +708,7 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
     }
     
     if (!words || words.length < 16) {
-      throw new Error(`Not enough words in category "${room.category}" (found ${words?.length || 0} words)`);
+      throw new Error(`Not enough words in category "${selectedCategory.name}" (found ${words?.length || 0} words)`);
     }
     
     // Shuffle and select words
@@ -748,6 +768,7 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
       .update({
         current_phase: 'wordReveal',
         current_round: nextRound,
+        category: selectedCategory.name,
         word_grid: wordGrid,
         secret_word: secretWord,
         button_holder_index: nextButtonIndex,
