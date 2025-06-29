@@ -40,6 +40,12 @@ interface UseGameRealtimeReturn {
 
 // Helper function to normalize room data from database (snake_case) to our types (camelCase)
 const normalizeRoomData = (roomData: any): GameRoom => {
+  console.log('=== FRONTEND ROOM DATA NORMALIZATION ===');
+  console.log('Raw room data category:', roomData.category);
+  console.log('Current round:', roomData.current_round);
+  console.log('Current phase:', roomData.current_phase);
+  console.log('=== END NORMALIZATION DEBUG ===');
+  
   return {
     id: roomData.id,
     name: roomData.name,

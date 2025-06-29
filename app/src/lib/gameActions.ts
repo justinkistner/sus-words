@@ -693,7 +693,12 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
     // Select a random category for this round
     const randomCategoryIndex = Math.floor(Math.random() * categories.length);
     const selectedCategory = (categories as Category[])[randomCategoryIndex];
-    console.log('New category selected for round:', selectedCategory.name);
+    console.log('=== CATEGORY SELECTION DEBUG ===');
+    console.log('Available categories:', categories.map(c => c.name));
+    console.log('Random index:', randomCategoryIndex, 'out of', categories.length);
+    console.log('Selected category:', selectedCategory.name);
+    console.log('Previous room category:', room.category);
+    console.log('=== END CATEGORY DEBUG ===');
     
     // Get new words for the grid
     const { data: words, error: wordsError } = await supabase
@@ -776,6 +781,11 @@ export async function startNextRound(roomId: string): Promise<{ success: boolean
         turn_started_at: new Date().toISOString()
       })
       .eq('id', roomId);
+      
+    console.log('=== DATABASE UPDATE RESULT ===');
+    console.log('Category update error:', wordRevealUpdateError);
+    console.log('Updated room with category:', selectedCategory.name);
+    console.log('=== END DATABASE UPDATE ===');
       
     if (wordRevealUpdateError) {
       console.error('Error updating room to wordReveal:', wordRevealUpdateError);
