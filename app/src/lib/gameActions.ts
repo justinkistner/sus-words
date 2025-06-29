@@ -158,7 +158,7 @@ export async function leaveGame(roomId: string, playerId: string): Promise<{ suc
         }
       }
       
-      return { success: true, newHostId, gameReset: true };
+      return { success: true, newHostId: newHostId || undefined, gameReset: true };
     }
     
     // Scenario 3: Handle host reassignment (game continues)
@@ -208,7 +208,7 @@ export async function leaveGame(roomId: string, playerId: string): Promise<{ suc
       }
     }
     
-    return { success: true, newHostId, gameReset: false };
+    return { success: true, newHostId: newHostId || undefined, gameReset: false };
   } catch (error) {
     console.error('Error leaving game:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to leave game';
